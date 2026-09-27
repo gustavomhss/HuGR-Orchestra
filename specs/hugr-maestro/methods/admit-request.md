@@ -122,7 +122,7 @@ the smallest question.
 | `atlas-orientation-read`           | read compact project orientation                                    | Atlas read only                 |
 | `maestro-admission-record`         | persist method result keyed to message                              | OpenCode durable event/metadata |
 | `admission-schema-guard`           | reject malformed assessment/result                                  | before record                   |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No shell, edit, write, external network, Atlas write, or member tool is granted to this method.
 

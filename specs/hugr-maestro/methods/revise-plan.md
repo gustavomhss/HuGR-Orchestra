@@ -69,8 +69,8 @@ parent revision hash, explicit change reason, field-level diff, ScopeProposal mo
 binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta field may claim Atlas-sourced
 successor address, ownership, or fact. `UNGROUNDED` successor preserves its `InspectionBoundary` list and exclusions
 as mode-dependent scope, never canonical territory.
-It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by durable projection, not deleted or
-rewritten. Same-mode freshness change (capability receipt, inspection SHA, anchor verification, or current-evidence
+It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by durable
+`execution-eligibility-projection-write`, not deleted or rewritten. Same-mode freshness change (capability receipt, inspection SHA, anchor verification, or current-evidence
 identity/hash) is not a revision: it supersedes old approval and keeps vN for linked ContextRecord, validation,
 presentation, and direct ApprovalDecision. Mode change requires new ScopeProposal then vN+1. Only plan-field or
 mode/authority shape change creates vN+1.
@@ -79,7 +79,8 @@ mode/authority shape change creates vN+1.
 
 `revision-lineage-guard` requires parent hash, monotonic revision identity, declared delta, matching ScopeProposal,
 complete field provenance, no Atlas-sourced successor fact before successor ContextRecord, and no transfer or
-reactivation of prior approval. Persist revision and invalidation projection atomically. Pass vN+1 to
+reactivation of prior approval. Invoke `execution-eligibility-projection-write` atomically with revision/mode
+supersession; projection failure is `HOLD` before child creation. Persist revision and invalidation projection atomically. Pass vN+1 to
 `assemble-context`.
 
 ## Skills
@@ -96,8 +97,9 @@ reactivation of prior approval. Persist revision and invalidation projection ato
 | `change-record-read`               | read stakeholder/validation change evidence                              | Maestro durable evidence read  |
 | `scope-proposal-read`              | read immutable mode-bound successor scope                               | Maestro durable evidence read  |
 | `plan-revision-write`              | persist successor revision and diff                                      | Maestro durable evidence write |
+| `execution-eligibility-projection-write` | invoke sole durable projection owner for revision/mode supersession | atomic with revision write |
 | `revision-lineage-guard`           | require parent/delta/provenance and invalidate old execution eligibility | before persistence             |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No live Atlas read/write, shell, product edit, external network, member tool, approval write, Task creation, or
 dispatch is granted.
@@ -122,6 +124,7 @@ selects one, never auto-merge.
 | Ambiguous material delta                                     | `CLARIFY`; no successor/task                      |
 | Missing/mismatched parent, change, or ScopeProposal evidence | `HOLD`; require linked admission recovery         |
 | Non-monotonic/altered lineage or approval transfer           | `HOLD`; preserve audit evidence                   |
+| execution-eligibility-projection-write failure               | `HOLD`; no child creation                          |
 | Concurrent successors                                        | `HOLD`; stakeholder selects/reconciles explicitly |
 | Duplicate trigger                                            | return stored successor/question                  |
 

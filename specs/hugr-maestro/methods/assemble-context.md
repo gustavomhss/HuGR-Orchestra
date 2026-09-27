@@ -98,7 +98,9 @@ freeze, not foundation source evidence.
    paths against current evidence. It does not require current evidence identity/hash/SHA to equal historical scope
    evidence: valid SHA-only evidence change creates linked ContextRecord. It holds if stored mode/boundaries/anchors
    no longer validate, or if requested scope changes; those require `resolve-scope` plus `revise-plan` as appropriate.
-   It never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
+   On changed current evidence, invoke `execution-eligibility-projection-write` atomically for old
+   ApprovalDecision/current-evidence before context persistence; writer failure is `HOLD` with no child creation. It
+   never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
 4. Persist immutable linked `ContextRecord` bound to same revision hash and historical ScopeProposal. `validate-plan`
    receives record identity only.
 
@@ -114,6 +116,7 @@ freeze, not foundation source evidence.
 | `repository-inspection-read`       | read current trusted inspection identity                    | bounded adapter read           |
 | `atlas-context-envelope-read`      | frozen adapter over measured current Atlas seam            | Atlas read only                |
 | `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
+| `execution-eligibility-projection-write` | invoke sole durable projection owner on changed current evidence | atomic with context write |
 | `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
 | `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
 | `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
@@ -131,15 +134,17 @@ Maestro binds evidence; it cannot choose scope, promote retrieved text into stak
 `ContextRecord` mode is exactly `GROUNDED` or `UNGROUNDED`. It stores revision hash, canonical scope, mode, result,
 ScopeProposal identity/content hash, trusted capability-memory and repository-inspection record identities+hashes,
 timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope address/snapshot, and
-freshness/truncation/budget evidence defined by frozen seam. `UNGROUNDED` stores exact ABSENT/BOOTSTRAP
-capability/memory receipt, current inspection SHA, immutable inspection-receipt identity/content hash, and bound
+freshness/truncation/budget evidence plus current envelope/catalog identities+hashes defined by frozen seam.
+`UNGROUNDED` stores exact ABSENT/BOOTSTRAP capability/memory receipt identity+hash, current inspection SHA,
+immutable inspection-receipt identity/content hash, and bound
 `InspectionBoundary` list, stored anchor-verification receipt identity+hash, plus exclusions; it contains no Atlas source.
 `UNGROUNDED` also stores every resolved path/anchor relation.
 
-Deduplication key is `(planRevisionId, scopeMode, evidenceIdentity, methodVersion)`. Grounded `evidenceIdentity` is
-envelope snapshot/version. Ungrounded `evidenceIdentity` is capability/memory receipt plus inspection SHA plus
-inspection-receipt identity. Replay returns stored record; new evidence creates linked result and never replaces
-prior plan evidence.
+Deduplication key is `(planRevisionId, scopeMode, currentEvidenceIdentityHash, methodVersion)`. Canonical complete
+`currentEvidenceIdentityHash` is GROUNDED capability identity/hash plus current envelope identity/hash plus catalog
+identity/hash; UNGROUNDED capability/memory receipt identity/hash plus inspection SHA plus anchor-verification receipt
+identity/hash. Replay returns stored record only for exact complete current evidence. Any changed component creates
+linked ContextRecord and never replays or replaces prior plan evidence.
 
 ## Refusal and Recovery
 
@@ -154,6 +159,7 @@ prior plan evidence.
 | Empty, glob, directory, repository-wide, or SHA-unbound InspectionBoundary | `HOLD`; no broad fallback                      |
 | Missing/mismatched historical ScopeProposal or its stored inspection-receipt identity/content | `HOLD`; no re-resolution or live scan |
 | SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
+| execution-eligibility-projection-write failure | `HOLD`; no child creation                                  |
 | Stored mode/boundaries/anchors no longer validate or requested scope changes | `HOLD`; resolve-scope + revise-plan as appropriate |
 | Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
 | Missing/mismatched resolved path/anchor relation or ambiguous symbol-only anchor | `HOLD`; no context binding                 |

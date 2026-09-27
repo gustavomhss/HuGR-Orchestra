@@ -89,7 +89,8 @@ semantic conflict belongs to stakeholder review or `clarify-decision`.
 Persist immutable `PlanValidationRecord`: input hashes, policy version, enumerated checks, per-check verdict,
 issue IDs, timestamp, and result. For supplied linked same-mode ContextRecord with changed capability receipt,
 inspection SHA, anchor verification, or current-evidence identity/hash, persist durable
-`SUPERSEDED_FOR_EXECUTION` projection for each prior approval decision and linked validation. New validation is `VALID` when new evidence passes required
+`SUPERSEDED_FOR_EXECUTION` projection through `execution-eligibility-projection-write` for each prior approval
+decision and its old current-evidence binding, atomically with linked validation. New validation is `VALID` when new evidence passes required
 checks, otherwise `INVALID`; unavailable evidence is `HOLD`. Projections preserve immutable history but revoke old
 execution eligibility. New `VALID` still requires new presentation and direct ApprovalDecision. Only `VALID` yields
 approval eligibility for this exact revision and current-evidence identity/hash.
@@ -103,9 +104,10 @@ approval eligibility for this exact revision and current-evidence identity/hash.
 | `current-context-evidence-read`    | verify current trusted capability/inspection binding        | bounded adapter evidence read  |
 | `validation-policy-read`           | load pinned deterministic policy                           | Maestro configuration read     |
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
+| `execution-eligibility-projection-write` | sole durable owner: atomically write `SUPERSEDED_FOR_EXECUTION` for old ApprovalDecision/current-evidence on changed evidence | validation/currentness lifecycle |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No model skill, Atlas read/write, shell, product edit, external network, member tool, plan mutation, approval
 write, or task creation is granted.
@@ -114,6 +116,8 @@ write, or task creation is granted.
 
 This method can refuse mechanical invalidity only. It cannot change a revision, approve a revision, waive a
 failed rule, infer semantic agreement, or turn `INVALID` into stakeholder acceptance.
+`execution-eligibility-projection-write` is sole durable projection owner. Validation/currentness lifecycle invokes
+it atomically on changed evidence; request-approval writes ApprovalDecision only.
 
 ## Evidence, Output, and Idempotence
 
@@ -134,9 +138,10 @@ resolve-scope and revise-plan before any ContextRecord reaches this method.
 | Missing/empty/malformed policy or check list               | `HOLD`, named validation-instrument failure                                                          |
 | Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
 | Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
+| execution-eligibility-projection-write failure               | `HOLD`; no child creation                                                                           |
 | Prior ContextRecord stale or current evidence unavailable    | route to assemble-context or `HOLD` before validator; no nonexistent refreshed record              |
 | Supplied same-mode ContextRecord with receipt/SHA/anchor change | supersede old approval; validate supplied record under required checks                            |
-| Any freshness change                                         | durable `SUPERSEDED_FOR_EXECUTION` projection; old approval cannot authorize Task/child Session    |
+| Any freshness change                                         | atomic durable projection; old approval cannot authorize Task/child Session                         |
 | Symbol-only anchor zero/multiple-path or resolved-path relation mismatch | `INVALID`; require resolved scope/context                         |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
 | Unknown semantic product conflict                          | remain `VALID` mechanically, rendered as stakeholder-visible uncertainty; never hidden auto-approval |

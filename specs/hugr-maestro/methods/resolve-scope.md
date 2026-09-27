@@ -133,7 +133,7 @@ later plan methods receive proposal ID and exact binding, not model text.
 | `scope-proposal-write`             | persist immutable proposal                                 | Maestro durable evidence write |
 | `scope-input-guard`                | require trusted record schema/hash/producer/grant, direct-user role, subject session/project, byte range/text, and same-SHA receipt | before reasoning |
 | `scope-proposal-guard`             | reject receipt-invalid/unanchored/broad/forged boundary or Atlas metadata | before persistence |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No Pack read, Atlas write, shell, generic repository scan, product edit, member tool, Task, plan, approval, or
 dispatch capability exists.

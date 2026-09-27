@@ -83,9 +83,11 @@ needs an explicit acceptance case before it can decide.
 
 For approve/decline, persist `ApprovalDecision` with ComposedActor, user reply message ID, presentation ID, decision,
 plan+validation/context record identities/hashes, exact `currentEvidenceIdentityHash`, policy/context versions, and
-timestamp. Any freshness change appends durable `SUPERSEDED_FOR_EXECUTION` projection: old decision remains immutable
-history, cannot authorize Task/child Session, and transfers nowhere. Only new context, validation, presentation, and
-direct user approval can authorize execution.
+timestamp. Any freshness change receives durable `SUPERSEDED_FOR_EXECUTION` projection: old decision remains
+immutable history, cannot authorize Task/child Session, and transfers nowhere.
+`execution-eligibility-projection-write` in validation/currentness lifecycle writes that projection;
+request-approval writes ApprovalDecision only. Only new context, validation, presentation, and direct user approval
+can authorize execution.
 
 ## Tools and Guards
 
@@ -99,7 +101,7 @@ direct user approval can authorize execution.
 | `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
