@@ -300,6 +300,22 @@ describe("Maestro governed lifecycle", () => {
         expect(Exit.isFailure(altered)).toBe(true)
         expect(prompts).toBe(2)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
+        yield* database.db
+          .delete(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, chat.id),
+              eq(EventTable.type, EventV2.versionedType(MaestroEvent.Approval.ConsumedV2.type, 2)),
+            ),
+          )
+          .run()
+          .pipe(Effect.orDie)
+        yield* sessions.remove(first.metadata.sessionId)
+        const recovered = yield* def.execute(input, context)
+        expect(recovered.metadata.sessionId).toBe(first.metadata.sessionId)
+        expect((yield* sessions.get(first.metadata.sessionId)).permission).toEqual(child.permission)
+        expect(prompts).toBe(3)
+        expect(yield* sessions.children(chat.id)).toHaveLength(1)
       }),
     15_000,
   )

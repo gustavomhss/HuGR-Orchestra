@@ -1283,7 +1283,7 @@ export type GlobalEvent = {
           permission: Array<{
             permission: string
             pattern: string
-            action: string
+            action: "allow" | "deny" | "ask"
           }>
         }
       }
@@ -4075,7 +4075,7 @@ export type SyncEventMaestroApprovalReserved = {
       permission: Array<{
         permission: string
         pattern: string
-        action: string
+        action: "allow" | "deny" | "ask"
       }>
     }
   }
@@ -5719,7 +5719,7 @@ export type MaestroApprovalReserved = {
     permission: Array<{
       permission: string
       pattern: string
-      action: string
+      action: "allow" | "deny" | "ask"
     }>
   }
 }
@@ -7204,7 +7204,7 @@ export type EventMaestroApprovalReserved = {
     permission: Array<{
       permission: string
       pattern: string
-      action: string
+      action: "allow" | "deny" | "ask"
     }>
   }
 }

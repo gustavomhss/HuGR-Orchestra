@@ -169,7 +169,11 @@ export const TaskTool = Tool.define(
         ),
       ]
       let reservedChildPermissions:
-        | readonly { readonly permission: string; readonly pattern: string; readonly action: string }[]
+        | readonly {
+            readonly permission: string
+            readonly pattern: string
+            readonly action: "allow" | "deny" | "ask"
+          }[]
         | undefined
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
@@ -534,7 +538,7 @@ export const TaskTool = Tool.define(
             parentID: ctx.sessionID,
             title: params.description + ` (@${next.name} subagent)`,
             agent: nextID,
-            permission: childPermissions,
+            permission: governedChildID ? permissionSnapshot : childPermissions,
           })
           .pipe(
             Effect.catchCause(() => {

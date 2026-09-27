@@ -123,7 +123,7 @@ export namespace Approval {
         Schema.Struct({
           permission: Schema.String,
           pattern: Schema.String,
-          action: Schema.String,
+          action: Schema.Literals(["allow", "deny", "ask"]),
         }),
       ),
     },
