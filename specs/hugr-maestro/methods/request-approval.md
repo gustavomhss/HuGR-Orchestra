@@ -31,6 +31,7 @@ planRevisionId       immutable PROPOSED revision identity + content hash
 validationRecordId   current VALID validation record identity + input/policy hashes
 contextRecordId      exact current GROUNDED or UNGROUNDED ContextRecord bound by validation
 currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
+currentEvidenceIdentityHash canonical current-evidence identity + hash bound to validation and ContextRecord
 actor                exact ComposedActor { projectId, sessionId, memberId }
 approvalMessageId    explicit user reply message identity; absent while creating presentation
 methodVersion        version of this contract
@@ -44,8 +45,8 @@ approval syntax is required.
 ## Preconditions
 
 1. Revision and validation record resolve, remain immutable, and hash-match presentation.
-2. Validation is currently `VALID` and current-context evidence exactly verifies its bound `GROUNDED` or
-   `UNGROUNDED` ContextRecord before presentation and decision.
+2. Validation is currently `VALID` and carries same `currentEvidenceIdentityHash` as current-context evidence for its
+   bound `GROUNDED` or `UNGROUNDED` ContextRecord before presentation and decision.
 3. Presentation belongs to same project/session, precedes user reply, and no newer plan revision, validation,
    or approval presentation intervenes.
 4. Reply is durable direct user conversation input, not Maestro/member/model/tool output.
@@ -81,8 +82,10 @@ needs an explicit acceptance case before it can decide.
 ### 3. Record Immutable Decision
 
 For approve/decline, persist `ApprovalDecision` with ComposedActor, user reply message ID, presentation ID, decision,
-plan+validation/context record identities/hashes, policy/context versions, and timestamp. Later plan/context/policy change
-creates new revision/validation/presentation; old decision remains history and transfers nowhere.
+plan+validation/context record identities/hashes, exact `currentEvidenceIdentityHash`, policy/context versions, and
+timestamp. Any freshness change appends durable `SUPERSEDED_FOR_EXECUTION` projection: old decision remains immutable
+history, cannot authorize Task/child Session, and transfers nowhere. Only new context, validation, presentation, and
+direct user approval can authorize execution.
 
 ## Tools and Guards
 
@@ -96,7 +99,7 @@ creates new revision/validation/presentation; old decision remains history and t
 | `approval-decision-write`          | later: append immutable conversation decision                             | only with first governed Task slice |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | permit later Task/child Session only with this approved revision identity | Session/Task boundary               |
+| `no-governed-task-before-approval` | require exact current VALID validation and approval decision bound to same current-evidence identity/hash; reject mismatch before child creation | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
@@ -121,7 +124,8 @@ message against different presentation/revision holds with visible mismatch reas
 | Condition                                                                                       | Result                                                                            |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Unavailable current-context evidence                                                        | `HOLD`; no presentation or decision                                               |
-| Changed current mode/SHA/receipt/anchor binding                                               | `HOLD`; require new context, validation, and presentation                         |
+| Changed mode/capability receipt/SHA/anchor/current-evidence identity                          | `SUPERSEDED_FOR_EXECUTION`; require new context, validation, and presentation     |
+| Validation/approval current-evidence mismatch                                                  | `HOLD`; named mismatch rejection before child creation                            |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
@@ -153,6 +157,8 @@ message against different presentation/revision holds with visible mismatch reas
    validation before this approval; invalid or unbounded boundary holds earlier.
 8. Current-context verification is required before presentation and decision. Changed mode, SHA, receipt, or anchor
    binding requires new context, validation, and presentation; unavailable verification holds.
+9. Task/child Session fence requires exact current `VALID` validation and approved decision bound to same
+   `currentEvidenceIdentityHash`. Freshness change supersedes old approval; revalidation cannot reactivate it.
 
 ## Anti-Overengineering Boundary
 

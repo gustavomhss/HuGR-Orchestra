@@ -31,6 +31,7 @@ planRevision         complete revision fields and field provenance
 contextRecord        current bound GROUNDED or UNGROUNDED ContextRecord
 currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
 currentEvidenceIdentityHash canonical current-evidence identity + hash for ContextRecord mode/SHA/receipt/anchor binding
+priorApprovalDecisions immutable approval decisions for this revision, if any
 priorRevision        optional immutable parent revision
 validationPolicy     frozen deterministic schema/policy version
 methodVersion        version of this contract
@@ -85,7 +86,10 @@ semantic conflict belongs to stakeholder review or `clarify-decision`.
 ### 3. Persist Verdict
 
 Persist immutable `PlanValidationRecord`: input hashes, policy version, enumerated checks, per-check verdict,
-issue IDs, timestamp, and result. Only `VALID` yields approval eligibility for this exact revision.
+issue IDs, timestamp, and result. Any changed mode, capability receipt, inspection SHA, anchor verification, or
+current-evidence identity/hash persists linked `INVALID` plus durable `SUPERSEDED_FOR_EXECUTION` projection for each
+prior approval decision. Projections preserve immutable history but revoke execution eligibility. Only `VALID` yields
+approval eligibility for this exact revision and current-evidence identity/hash.
 
 ## Tools and Guards
 
@@ -98,7 +102,7 @@ issue IDs, timestamp, and result. Only `VALID` yields approval eligibility for t
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
-| `no-governed-task-before-approval` | deny Task/child Session without approved revision identity | Session/Task boundary          |
+| `no-governed-task-before-approval` | require exact current VALID validation and approval decision bound to same current-evidence identity/hash; reject mismatch before child creation | Session/Task boundary |
 
 No model skill, Atlas read/write, shell, product edit, external network, member tool, plan mutation, approval
 write, or task creation is granted.
@@ -127,6 +131,7 @@ it never replays prior `VALID` or overwrites prior decision evidence.
 | Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
 | Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
 | Current mode/SHA/receipt/anchor binding changed             | `INVALID`; require new context and validation                                                      |
+| Any freshness change                                         | durable `SUPERSEDED_FOR_EXECUTION` projection; old approval cannot authorize Task/child Session    |
 | Symbol-only anchor zero/multiple-path or resolved-path relation mismatch | `INVALID`; require resolved scope/context                         |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
 | Unknown semantic product conflict                          | remain `VALID` mechanically, rendered as stakeholder-visible uncertainty; never hidden auto-approval |
@@ -164,6 +169,8 @@ it never replays prior `VALID` or overwrites prior decision evidence.
     `INVALID` and requires new context plus validation.
 11. Canonical current-evidence identity/hash changes never replay a prior `VALID`; symbol-only anchor requires one
     receipt path and matching persisted resolved path/anchor relation.
+12. Freshness change creates linked `INVALID` and `SUPERSEDED_FOR_EXECUTION` projection. Revalidation cannot revive
+    old approval; only new context, validation, presentation, and direct user approval can authorize execution.
 
 ## Anti-Overengineering Boundary
 

@@ -10,8 +10,8 @@ V2 redesigns it as immutable revision lineage and execution-ineligibility projec
 Create one immutable successor `PlanRevision` from an existing revision, an explicit stakeholder change or
 validation issue, and immutable `GROUNDED` or `UNGROUNDED` `ScopeProposal` supplied by `resolve-scope`. This method
 creates successor `PlanRevision` only, with `PENDING` context binding. `assemble-context` binds current Atlas only
-after successor exists. Prior revision and any approval remain
-immutable historical evidence; they become ineligible for new governed work.
+after successor exists. Prior revision and any approval remain immutable historical evidence; they become
+`SUPERSEDED_FOR_EXECUTION` and ineligible for new governed work.
 
 ```text
 REVISED   proposed vN+1; prior approval ineligible; next owner assemble-context
@@ -65,14 +65,17 @@ parent revision hash, explicit change reason, field-level diff, ScopeProposal mo
 binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta field may claim Atlas-sourced
 successor address, ownership, or fact. `UNGROUNDED` successor preserves its `InspectionBoundary` list and exclusions
 as mode-dependent scope, never canonical territory.
-It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by projection, not deleted or
-rewritten; only vN+1 can later seek validation/approval.
+It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by durable projection, not deleted or
+rewritten; freshness change (mode, capability receipt, inspection SHA, anchor verification, or current-evidence
+identity/hash) also appends that projection without reactivating old approval. Only vN+1 can later seek
+validation/approval.
 
 ### 3. Guard and Persist
 
 `revision-lineage-guard` requires parent hash, monotonic revision identity, declared delta, matching ScopeProposal,
-complete field provenance, no Atlas-sourced successor fact before successor ContextRecord, and no transfer of prior approval. Persist revision and invalidation projection
-atomically. Pass vN+1 to `assemble-context`.
+complete field provenance, no Atlas-sourced successor fact before successor ContextRecord, and no transfer or
+reactivation of prior approval. Persist revision and invalidation projection atomically. Pass vN+1 to
+`assemble-context`.
 
 ## Skills
 
