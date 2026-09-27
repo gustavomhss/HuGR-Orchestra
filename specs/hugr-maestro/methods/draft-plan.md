@@ -72,16 +72,18 @@ field sources          stakeholder | atlas:<address> | maestro
 status                 PROPOSED only
 ```
 
-`PENDING` context binding permits no field to claim `atlas:<address>`, Atlas ownership, or Atlas fact, regardless of
-ScopeProposal mode. `maestro` fields remain visible to stakeholder and cannot become implied authority. Scope comes
-only from immutable ScopeProposal; draft cannot alter, widen, recreate, or treat InspectionBoundary as territory.
+Before a `GROUNDED` ContextRecord binds, no field may claim `atlas:<address>`, Atlas ownership, or Atlas fact,
+regardless of ScopeProposal mode. Direct stakeholder claims remain `stakeholder` source. `maestro` fields remain visible to
+stakeholder and cannot become implied authority. Scope comes only from immutable ScopeProposal; draft cannot alter,
+widen, recreate, or treat InspectionBoundary as territory.
 `UN-SEEDED` remains orientation only.
 
 ### 3. Persist Draft
 
 `plan-provenance-guard` rejects missing field source, absent/mismatched ScopeProposal, fabricated or unbound Atlas
-address, any Atlas claim while context is `PENDING`, hidden assumption, non-initial revision identity, or status
-other than `PROPOSED`. Persist `PlanRevision` only after guard success. Hand its identity to `assemble-context`.
+address, any Atlas claim before a `GROUNDED` ContextRecord binds, loss of a direct stakeholder claim's `stakeholder` source,
+hidden assumption, non-initial revision identity, or status other than `PROPOSED`. Persist `PlanRevision` only after
+guard success. Hand its identity to `assemble-context`.
 
 ## Skills
 
@@ -142,8 +144,8 @@ Any stakeholder answer or changed context after v1 enters `revise-plan`; v1 rema
 
 1. Concrete request with resolved scope proposal yields `PROPOSED` revision with every required field, source
    labels, `PENDING` context binding, visible Maestro assumptions, and no Task.
-2. A `GROUNDED` or `UNGROUNDED` ScopeProposal yields `PROPOSED` only when every project-specific claim is a visible
-   Maestro proposal; no field claims Atlas address, ownership, or fact before a `GROUNDED` ContextRecord binds.
+2. A `GROUNDED` or `UNGROUNDED` ScopeProposal yields `PROPOSED` with direct stakeholder claims preserved as
+   `stakeholder` source; no field claims Atlas address, ownership, or fact before a `GROUNDED` ContextRecord binds.
    `UNGROUNDED` preserves its bounded `InspectionBoundary` list and exclusions as `PENDING` scope, never territory.
 3. Missing desired outcome or decision that changes incompatible product results yields one `CLARIFY` need,
    not a made-up acceptance/scope field.
