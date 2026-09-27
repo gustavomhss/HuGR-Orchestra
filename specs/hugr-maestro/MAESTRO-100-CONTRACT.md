@@ -172,18 +172,21 @@ agent until this exception's owner/interface/check conditions are frozen.
 Authority  admit-request -> resolve-scope -> draft-plan (persist PROPOSED revision with PENDING ContextRecord)
            -> assemble-context (first ContextRecord) -> validate-plan (VALID)
             -> request-approval presentation -> direct user reply -> atomically durable ApprovalDecision + ELIGIBLE_FOR_EXECUTION
-           -> later Task/child Session
-Slice      compile immutable Work Packages and Relay runs after durable ApprovalDecision
-Delegate   route seat -> grant tools -> create or resume governed Runner after Task/child Session fence
+            -> later Task/child Session
+Slice      compile immutable Work Packages and Relay runs only from current `ELIGIBLE_FOR_EXECUTION`
+Delegate   route seat -> grant tools -> create or resume governed Runner after current-eligibility Task/child Session fence
 Verify     gate -> cold review -> CI evidence
 Reconcile  compare plan, context, result, Project, PR, and target SHA
 Close      merge verification -> provenance -> memory -> outcome
 ```
 
-`request-approval` atomically creates durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection. Task/child
-Session fence requires current projection bound to its decision, same immutable revision, current `VALID` validation,
-`ContextRecord`, and current-evidence identity/hash; missing, `SUPERSEDED_FOR_EXECUTION`, or mismatched projection denies before
-child creation. Currentness/revision transitions atomically supersede eligibility.
+`approval-eligibility-write` is one authoritative serialized transaction: re-read current evidence identity/hash,
+then persist durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` only when it equals validated ContextRecord
+evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Task/child Session fence,
+before `sessions.create`, live-reads authoritative current evidence and compares it to projection, ContextRecord, and
+validation hashes. Missing, `SUPERSEDED_FOR_EXECUTION`, or differing evidence denies child creation and invokes/awaits
+currentness supersession; stale dispatch cannot proceed. Currentness/revision transitions atomically supersede
+eligibility.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and

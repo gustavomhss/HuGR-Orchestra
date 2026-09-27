@@ -81,13 +81,16 @@ needs an explicit acceptance case before it can decide.
 
 ### 3. Record Immutable Decision and Eligibility
 
-For approve, atomically persist immutable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection bound to that
-decision, exact revision, current `VALID` validation, ContextRecord, and `currentEvidenceIdentityHash`. Decline
-persists only immutable `ApprovalDecision`. Projection write failure is `HOLD`; no Task. This is sole
-eligible-projection creation. Currentness, validation, and revision-transition owners atomically replace eligibility
-with `SUPERSEDED_FOR_EXECUTION` on mismatch/change. Old decision remains immutable history, cannot authorize
-Task/child Session, and transfers nowhere. Only new context, validation, presentation, and direct user approval can
-authorize execution.
+For approve, `approval-eligibility-write` runs one authoritative serialized compare-and-write transaction: re-read
+current evidence identity/hash, then persist immutable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection
+bound to that decision, exact revision, current `VALID` validation, ContextRecord, and
+`currentEvidenceIdentityHash` only when re-read evidence equals validated ContextRecord evidence. Changed or
+unavailable evidence is `HOLD`; neither decision nor eligibility writes. Decline persists only immutable
+`ApprovalDecision`. Projection write failure is `HOLD`; no Task. This is sole eligible-projection creation.
+Currentness, validation, and revision-transition owners atomically replace eligibility with
+`SUPERSEDED_FOR_EXECUTION` on mismatch/change. Old decision remains immutable history, cannot authorize Task/child
+Session, and transfers nowhere. Only new context, validation, presentation, and direct user approval can authorize
+execution.
 
 ## Tools and Guards
 
@@ -98,11 +101,10 @@ authorize execution.
 | `current-context-evidence-read`    | verify exact ContextRecord currentness before display/decision            | bounded adapter evidence read       |
 | `session-message-read`             | verify direct user reply, order, role, and current presentation           | OpenCode durable conversation read  |
 | `session-message-write`            | persist exact visible approval target                                     | OpenCode durable conversation write |
-| `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
-| `execution-eligibility-projection-write` | atomically create `ELIGIBLE_FOR_EXECUTION` for approved exact current decision binding | with approval decision write |
+| `approval-eligibility-write`       | authoritative serialized compare-and-write: re-read evidence, then atomically persist ApprovalDecision + `ELIGIBLE_FOR_EXECUTION` only on exact validated ContextRecord match | before any governed Task |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` projection bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | before `sessions.create`, live-read authoritative current evidence; require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and matching projection/context/validation hashes; difference/missing/superseded denies child, invokes/awaits currentness supersession | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
@@ -115,11 +117,12 @@ and records it. Maestro/member/model/tool output cannot approve itself or infer 
 ## Evidence, Output, and Idempotence
 
 `ApprovalPresentation` is durable assistant Session message evidence. After valid direct approve,
-`request-approval` atomically appends immutable `ApprovalDecision` and its frozen `ELIGIBLE_FOR_EXECUTION`
-projection, storing ordered presentation/user message IDs, exact revision/validation hashes, ContextRecord, and
-current-evidence identity/hash. It is prerequisite to every later governed Task; Task fence reads exact current
-projection only. No PlanRevision or PlanValidationRecord table is introduced until those methods have a real runtime
-consumer.
+`approval-eligibility-write` atomically appends immutable `ApprovalDecision` and frozen
+`ELIGIBLE_FOR_EXECUTION` projection, storing ordered presentation/user message IDs, exact revision/validation hashes,
+ContextRecord, and current-evidence identity/hash. It is prerequisite to every later governed Task; before
+`sessions.create`, Task fence live-reads authoritative current evidence and compares it to projection/context/
+validation hashes. Difference denies child creation and awaits currentness supersession. No PlanRevision or
+PlanValidationRecord table is introduced until those methods have a real runtime consumer.
 
 Presentation deduplication key is `(planRevisionId, validationRecordId, sessionId, methodVersion)`. Decision
 deduplication key is `(approvalMessageId, methodVersion)`. Same reply returns stored decision. Reusing one reply
@@ -132,8 +135,9 @@ message against different presentation/revision holds with visible mismatch reas
 | Unavailable current-context evidence                                                        | `HOLD`; no presentation or decision                                               |
 | Changed mode/capability receipt/SHA/anchor/current-evidence identity                          | `HOLD` before presentation/decision; validation/currentness lifecycle owns revocation |
 | Validation/approval current-evidence mismatch                                                  | `HOLD`; named mismatch rejection before child creation                            |
+| Compare-and-write re-read changed/unavailable evidence                                         | `HOLD`; neither ApprovalDecision nor eligibility write                           |
 | Eligible-projection write failure                                                                | `HOLD`; no Task/child Session                                                     |
-| Missing/superseded/mismatched execution-eligibility projection                                  | deny Task/child Session before child creation                                     |
+| Task live-read difference/missing/superseded eligibility                                        | deny before `sessions.create`; invoke/await currentness supersession; no child   |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
@@ -167,9 +171,11 @@ message against different presentation/revision holds with visible mismatch reas
 8. Current-context verification is required before presentation and decision. Same-mode SHA, receipt, or anchor
    binding change requires new ContextRecord, validation, presentation, and direct ApprovalDecision on same immutable
    revision; mode change requires resolve-scope then revise-plan. Unavailable verification holds.
-9. Direct approval atomically creates only exact current `ELIGIBLE_FOR_EXECUTION` bound to decision, revision,
-   `VALID` validation, ContextRecord, and `currentEvidenceIdentityHash`; Task/child Session fence denies absent,
-   superseded, or mismatched projection before child creation. Freshness change supersedes old eligibility;
+9. `approval-eligibility-write` re-reads current evidence identity/hash in authoritative serialized transaction and
+   writes decision plus exact current `ELIGIBLE_FOR_EXECUTION` only on validated ContextRecord match; changed or
+   unavailable evidence holds with neither write. Before `sessions.create`, Task/child Session fence live-reads
+   authoritative evidence, compares projection/context/validation hashes, then denies difference, missing, or
+   superseded eligibility and awaits currentness supersession. Freshness change supersedes old eligibility;
    revalidation cannot reactivate it.
 
 ## Anti-Overengineering Boundary
