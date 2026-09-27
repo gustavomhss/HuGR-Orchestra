@@ -99,7 +99,7 @@ direct user approval can authorize execution.
 | `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | require exact current VALID validation and approval decision bound to same current-evidence identity/hash; reject mismatch before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.

@@ -40,8 +40,10 @@ tests collected and passed. This proves selected Atlas seams, not an OpenCode ad
 Current Atlas `own(scope)` is the real ownership-state surface. Therefore:
 
 ```text
-orient-session -> admit-request -> select grounded ownership units -> draft-plan(context PENDING)
-               -> plan own_<unit> state reads -> validate-plan
+orient-session -> admit-request -> resolve-scope -> draft-plan(persist PROPOSED revision with PENDING ContextRecord)
+               -> assemble-context(first ContextRecord) -> validate-plan(VALID)
+               -> request-approval presentation -> direct user reply -> durable ApprovalDecision
+               -> later Task/child Session
 ```
 
 An empty/malformed/stale `OwnPackPlus` is not an `UN-SEEDED` declaration. V2 maps it to `HOLD`; pointers and

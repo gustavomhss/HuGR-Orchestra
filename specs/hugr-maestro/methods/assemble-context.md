@@ -120,7 +120,7 @@ freeze, not foundation source evidence.
 | `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
 | `context-request-schema-guard`     | require exact revision/ScopeProposal links                 | before Atlas read              |
 | `context-envelope-guard`           | require current trusted evidence exact match plus envelope/receipt verification | before persistence |
-| `no-governed-task-before-approval` | deny Task/child Session without approved revision identity | Session/Task boundary          |
+| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
 
 No model skill, shell, live scan, scope re-resolution, product edit, Atlas write, member tool, approval, or task
 creation is granted.

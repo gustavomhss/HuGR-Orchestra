@@ -102,7 +102,7 @@ approval eligibility for this exact revision and current-evidence identity/hash.
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
-| `no-governed-task-before-approval` | require exact current VALID validation and approval decision bound to same current-evidence identity/hash; reject mismatch before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
 
 No model skill, Atlas read/write, shell, product edit, external network, member tool, plan mutation, approval
 write, or task creation is granted.

@@ -92,7 +92,7 @@ reactivation of prior approval. Persist revision and invalidation projection ato
 | `scope-proposal-read`              | read immutable mode-bound successor scope                               | Maestro durable evidence read  |
 | `plan-revision-write`              | persist successor revision and diff                                      | Maestro durable evidence write |
 | `revision-lineage-guard`           | require parent/delta/provenance and invalidate old execution eligibility | before persistence             |
-| `no-governed-task-before-approval` | deny Task/child Session without current approved revision identity       | Session/Task boundary          |
+| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
 
 No live Atlas read/write, shell, product edit, external network, member tool, approval write, Task creation, or
 dispatch is granted.

@@ -169,11 +169,12 @@ agent until this exception's owner/interface/check conditions are frozen.
 ## Lifecycle
 
 ```text
-Frame      orient -> admit -> clarify
-Ground     resolve scope -> inspect Atlas capability -> assemble context
-Contract   draft -> validate -> present -> direct user approval -> revise
-Slice      compile immutable Work Packages and Relay runs
-Delegate   route seat -> grant tools -> create or resume governed Runner
+Authority  admit-request -> resolve-scope -> draft-plan (persist PROPOSED revision with PENDING ContextRecord)
+           -> assemble-context (first ContextRecord) -> validate-plan (VALID)
+           -> request-approval presentation -> direct user reply -> durable ApprovalDecision
+           -> later Task/child Session
+Slice      compile immutable Work Packages and Relay runs after durable ApprovalDecision
+Delegate   route seat -> grant tools -> create or resume governed Runner after Task/child Session fence
 Verify     gate -> cold review -> CI evidence
 Reconcile  compare plan, context, result, Project, PR, and target SHA
 Close      merge verification -> provenance -> memory -> outcome
