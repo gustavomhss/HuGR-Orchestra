@@ -171,7 +171,7 @@ agent until this exception's owner/interface/check conditions are frozen.
 ```text
 Authority  admit-request -> resolve-scope -> draft-plan (persist PROPOSED revision with PENDING ContextRecord)
            -> assemble-context (first ContextRecord) -> validate-plan (VALID)
-           -> request-approval presentation -> direct user reply -> durable ApprovalDecision
+            -> request-approval presentation -> direct user reply -> atomically durable ApprovalDecision + ELIGIBLE_FOR_EXECUTION
            -> later Task/child Session
 Slice      compile immutable Work Packages and Relay runs after durable ApprovalDecision
 Delegate   route seat -> grant tools -> create or resume governed Runner after Task/child Session fence
@@ -180,8 +180,10 @@ Reconcile  compare plan, context, result, Project, PR, and target SHA
 Close      merge verification -> provenance -> memory -> outcome
 ```
 
-Task/child Session fence: require durable direct-user `ApprovalDecision` bound to same immutable revision, current
-`VALID` validation, `ContextRecord`, and current-evidence identity/hash; any mismatch denies before child creation.
+`request-approval` atomically creates durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection. Task/child
+Session fence requires current projection bound to its decision, same immutable revision, current `VALID` validation,
+`ContextRecord`, and current-evidence identity/hash; missing, `SUPERSEDED_FOR_EXECUTION`, or mismatched projection denies before
+child creation. Currentness/revision transitions atomically supersede eligibility.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and

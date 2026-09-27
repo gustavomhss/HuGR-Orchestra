@@ -42,12 +42,14 @@ Current Atlas `own(scope)` is the real ownership-state surface. Therefore:
 ```text
 orient-session -> admit-request -> resolve-scope -> draft-plan(persist PROPOSED revision with PENDING ContextRecord)
                -> assemble-context(first ContextRecord) -> validate-plan(VALID)
-               -> request-approval presentation -> direct user reply -> durable ApprovalDecision
+                -> request-approval presentation -> direct user reply -> atomically durable ApprovalDecision + ELIGIBLE_FOR_EXECUTION
                -> later Task/child Session
 ```
 
-Task/child Session fence: require durable direct-user `ApprovalDecision` bound to same immutable revision, current
-`VALID` validation, `ContextRecord`, and current-evidence identity/hash; any mismatch denies before child creation.
+`request-approval` atomically creates durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection. Task/child
+Session fence requires current projection bound to its decision, same immutable revision, current `VALID` validation,
+`ContextRecord`, and current-evidence identity/hash; missing, `SUPERSEDED_FOR_EXECUTION`, or mismatched projection denies before
+child creation. Currentness/revision transitions atomically supersede eligibility.
 
 An empty/malformed/stale `OwnPackPlus` is not an `UN-SEEDED` declaration. V2 maps it to `HOLD`; pointers and
 pull-reachable tail name the only valid depth path: another exact `own(unit)` read.
