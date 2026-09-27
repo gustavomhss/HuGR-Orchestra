@@ -287,9 +287,14 @@ describe("Maestro governed lifecycle", () => {
         const changedCall = yield* Effect.exit(def.execute(input, { ...context, callID: "call_task_changed" }))
         expect(Exit.isFailure(changedCall)).toBe(true)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
+        const child = yield* sessions.get(first.metadata.sessionId)
+        yield* sessions.setPermission({
+          sessionID: chat.id,
+          permission: [{ permission: "read", pattern: "*", action: "deny" }],
+        })
         yield* sessions.setPermission({
           sessionID: first.metadata.sessionId,
-          permission: [{ permission: "read", pattern: "*", action: "allow" }],
+          permission: [{ permission: "read", pattern: "*", action: "deny" }, ...(child.permission ?? [])],
         })
         const altered = yield* Effect.exit(def.execute(input, context))
         expect(Exit.isFailure(altered)).toBe(true)

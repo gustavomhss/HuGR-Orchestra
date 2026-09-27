@@ -1280,6 +1280,11 @@ export type GlobalEvent = {
           childSessionID: string
           parentSessionID: string
           agent: string
+          permission: Array<{
+            permission: string
+            pattern: string
+            action: string
+          }>
         }
       }
     | {
@@ -4046,7 +4051,7 @@ export type SyncEventMaestroApprovalReserved = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "maestro.approval.reserved.1"
+    type: "maestro.approval.reserved.2"
     id: string
     seq: number
     aggregateID: string
@@ -4067,6 +4072,11 @@ export type SyncEventMaestroApprovalReserved = {
       childSessionID: string
       parentSessionID: string
       agent: string
+      permission: Array<{
+        permission: string
+        pattern: string
+        action: string
+      }>
     }
   }
 }
@@ -5706,6 +5716,11 @@ export type MaestroApprovalReserved = {
     childSessionID: string
     parentSessionID: string
     agent: string
+    permission: Array<{
+      permission: string
+      pattern: string
+      action: string
+    }>
   }
 }
 
@@ -7186,6 +7201,11 @@ export type EventMaestroApprovalReserved = {
     childSessionID: string
     parentSessionID: string
     agent: string
+    permission: Array<{
+      permission: string
+      pattern: string
+      action: string
+    }>
   }
 }
 

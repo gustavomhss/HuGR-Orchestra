@@ -141,6 +141,36 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
       const nextID = next.id ?? params.subagent_type
+      const childPermission = deriveSubagentSessionPermission({
+        parentSessionPermission: parent.permission ?? [],
+        subagent: next,
+      })
+      const childToolDenies = [
+        ...(next.permission.some((rule) => rule.permission === "todowrite")
+          ? []
+          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
+        ...(next.permission.some((rule) => rule.permission === id)
+          ? []
+          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
+        ...(cfg.experimental?.primary_tools?.map((permission) => ({
+          permission,
+          pattern: "*" as const,
+          action: "deny" as const,
+        })) ?? []),
+      ]
+      const childPermissions = [
+        ...childPermission,
+        ...childToolDenies.filter(
+          (deny) =>
+            !childPermission.some(
+              (rule) =>
+                rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
+            ),
+        ),
+      ]
+      let reservedChildPermissions:
+        | readonly { readonly permission: string; readonly pattern: string; readonly action: string }[]
+        | undefined
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
@@ -305,15 +335,19 @@ export const TaskTool = Tool.define(
           childSessionID,
           parentSessionID: ctx.sessionID,
           agent: nextID,
+          permission: childPermissions,
         }
         const existingReservation = yield* database.db
-          .select({ data: EventTable.data })
+          .select({ data: EventTable.data, type: EventTable.type })
           .from(EventTable)
           .where(eq(EventTable.id, reservationID))
           .get()
           .pipe(Effect.orDie)
         if (existingReservation) {
-          const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.Reserved.data)(existingReservation.data)
+          if (existingReservation.type !== EventV2.versionedType(MaestroEvent.Approval.ReservedV2.type, 2)) {
+            return yield* Effect.fail(new Error("Governed Task denied: reservation-missing-permission-snapshot"))
+          }
+          const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ReservedV2.data)(existingReservation.data)
           if (
             existing.sessionID !== reservation.sessionID ||
             existing.presentationID !== reservation.presentationID ||
@@ -334,11 +368,12 @@ export const TaskTool = Tool.define(
           ) {
             return yield* Effect.fail(new Error("Governed Task denied: reservation-binding-mismatch"))
           }
+          reservedChildPermissions = existing.permission
         } else {
-          yield* events.publish(MaestroEvent.Approval.Reserved, reservation, { id: reservationID }).pipe(
+          yield* events.publish(MaestroEvent.Approval.ReservedV2, reservation, { id: reservationID }).pipe(
             Effect.catchCause(() =>
               database.db
-                .select({ data: EventTable.data })
+                .select({ data: EventTable.data, type: EventTable.type })
                 .from(EventTable)
                 .where(eq(EventTable.id, reservationID))
                 .get()
@@ -346,7 +381,10 @@ export const TaskTool = Tool.define(
                   Effect.orDie,
                   Effect.flatMap((event) => {
                     if (!event) return Effect.fail(new Error("Governed Task denied: reservation-hold"))
-                    const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.Reserved.data)(event.data)
+                    if (event.type !== EventV2.versionedType(MaestroEvent.Approval.ReservedV2.type, 2)) {
+                      return Effect.fail(new Error("Governed Task denied: reservation-missing-permission-snapshot"))
+                    }
+                    const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ReservedV2.data)(event.data)
                     if (
                       existing.sessionID !== reservation.sessionID ||
                       existing.presentationID !== reservation.presentationID ||
@@ -367,11 +405,13 @@ export const TaskTool = Tool.define(
                     ) {
                       return Effect.fail(new Error("Governed Task denied: reservation-binding-mismatch"))
                     }
+                    reservedChildPermissions = existing.permission
                     return Effect.void
                   }),
                 ),
             ),
           )
+          reservedChildPermissions = childPermissions
         }
         governedChildID = childSessionID
         governedPresentationID = approvedDecision.presentationID
@@ -472,41 +512,16 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
       }
       const session = governedChildID ? reserved : resumed
-      const childPermission = deriveSubagentSessionPermission({
-        parentSessionPermission: parent.permission ?? [],
-        subagent: next,
-      })
-      const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
-        ...(cfg.experimental?.primary_tools?.map((permission) => ({
-          permission,
-          pattern: "*" as const,
-          action: "deny" as const,
-        })) ?? []),
-      ]
-      const childPermissions = [
-        ...childPermission,
-        ...childToolDenies.filter(
-          (deny) =>
-            !childPermission.some(
-              (rule) =>
-                rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
-            ),
-        ),
-      ]
+      const permissionSnapshot = reservedChildPermissions
       if (
         reserved &&
-        (reserved.permission?.length !== childPermissions.length ||
+        (!permissionSnapshot ||
+          reserved.permission?.length !== permissionSnapshot.length ||
           reserved.permission?.some(
             (rule, index) =>
-              rule.permission !== childPermissions[index]?.permission ||
-              rule.pattern !== childPermissions[index]?.pattern ||
-              rule.action !== childPermissions[index]?.action,
+              rule.permission !== permissionSnapshot[index]?.permission ||
+              rule.pattern !== permissionSnapshot[index]?.pattern ||
+              rule.action !== permissionSnapshot[index]?.action,
           ))
       ) {
         return yield* Effect.fail(new Error("Governed Task denied: reservation-child-permission-mismatch"))

@@ -99,6 +99,37 @@ export namespace Approval {
   })
   export type Reserved = typeof Reserved.Type
 
+  export const ReservedV2 = Event.define({
+    type: "maestro.approval.reserved",
+    durable: { version: 2, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      presentationID: Schema.String,
+      approvalMessageID: Schema.String,
+      projectID: Schema.String,
+      memberID: Schema.String,
+      planRevisionID: Schema.String,
+      validationRecordID: Schema.String,
+      revisionHash: Schema.String,
+      validationHash: Schema.String,
+      contextHash: Schema.String,
+      policyHash: Schema.String,
+      taskHash: Schema.String,
+      callID: Schema.String,
+      childSessionID: Schema.String,
+      parentSessionID: Schema.String,
+      agent: Schema.String,
+      permission: Schema.Array(
+        Schema.Struct({
+          permission: Schema.String,
+          pattern: Schema.String,
+          action: Schema.String,
+        }),
+      ),
+    },
+  })
+  export type ReservedV2 = typeof ReservedV2.Type
+
   export const ConsumedV2 = Event.define({
     type: "maestro.approval.consumed",
     durable: { version: 2, aggregate: "sessionID" },
@@ -156,6 +187,7 @@ export const Definitions = Event.inventory(
   Approval.Decided,
   Approval.Consumed,
   Approval.Reserved,
+  Approval.ReservedV2,
   Approval.ConsumedV2,
   Admission.Decided,
 )

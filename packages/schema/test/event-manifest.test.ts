@@ -9,8 +9,8 @@ import { WorkspaceEvent } from "../src/workspace-event"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.length).toBe(64)
-    expect(EventManifest.Definitions.length).toBe(94)
+    expect(EventManifest.ServerDefinitions.length).toBe(65)
+    expect(EventManifest.Definitions.length).toBe(95)
     expect(SessionV1.Event.Definitions).toEqual([
       SessionV1.Event.Created,
       SessionV1.Event.Updated,
@@ -24,7 +24,7 @@ describe("public event manifest", () => {
       SessionV1.Event.Error,
     ])
     expect(EventManifest.Latest.size).toBe(93)
-    expect(EventManifest.Durable.size).toBe(41)
+    expect(EventManifest.Durable.size).toBe(42)
   })
 
   test("uses canonical definitions for current public events", () => {
@@ -37,7 +37,7 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("maestro.approval.decided")).toBe(MaestroEvent.Approval.Decided)
     expect(EventManifest.Latest.get("maestro.approval.presented")).toBe(MaestroEvent.Approval.Presented)
     expect(EventManifest.Latest.get("maestro.approval.consumed")).toBe(MaestroEvent.Approval.ConsumedV2)
-    expect(EventManifest.Latest.get("maestro.approval.reserved")).toBe(MaestroEvent.Approval.Reserved)
+    expect(EventManifest.Latest.get("maestro.approval.reserved")).toBe(MaestroEvent.Approval.ReservedV2)
     expect(EventManifest.Latest.get("maestro.admission.decided")).toBe(MaestroEvent.Admission.Decided)
     expect(EventManifest.Latest.get("project.updated")).toBe(Project.Event.Updated)
     expect(Project.Event.Definitions).toEqual([Project.Event.Updated])
@@ -47,7 +47,7 @@ describe("public event manifest", () => {
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
-    expect(EventManifest.Definitions.slice(49, 52)).toEqual([
+    expect(EventManifest.Definitions.slice(50, 53)).toEqual([
       SessionV1.Event.PartDelta,
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
