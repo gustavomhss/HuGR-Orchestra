@@ -10,8 +10,11 @@ const checks = [
   "atlas",
 ] as const
 
+const risks = ["docs", "package", "workflow", "api", "persistence", "security", "concurrency", "unknown"] as const
+const packageIDs = ["opencode", "core", "schema"] as const
+
 type CheckID = (typeof checks)[number]
-type PackageID = "opencode" | "core" | "schema"
+type PackageID = (typeof packageIDs)[number]
 
 export type CompileVerificationPlanInput = {
   baseSHA: string
@@ -35,7 +38,10 @@ export function compileVerificationPlan(input: CompileVerificationPlanInput): Ve
     !validSHA(input.baseSHA) ||
     !validSHA(input.headSHA) ||
     input.baseSHA === input.headSHA ||
-    !validPaths(input.changedPaths)
+    !validPaths(input.changedPaths) ||
+    !risks.includes(input.risk) ||
+    !validPackages(input.packages) ||
+    !validPackages(input.reverseDependencies)
   ) {
     return fallback(input)
   }
@@ -84,6 +90,10 @@ function validPaths(paths: readonly string[]) {
         !path.split(/[\\/]/).includes(".."),
     )
   )
+}
+
+function validPackages(packages: readonly PackageID[]) {
+  return new Set(packages).size === packages.length && packages.every((pkg) => packageIDs.includes(pkg))
 }
 
 function fallback(input: CompileVerificationPlanInput): VerificationPlan {

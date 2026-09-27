@@ -106,6 +106,14 @@ describe("compileVerificationPlan", () => {
     }
   })
 
+  test("falls back for unclassified risks, invalid package IDs, and duplicate package lists", () => {
+    expect(compileVerificationPlan({ ...input, risk: "unclassified" as never })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, packages: ["evil" as never] })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, reverseDependencies: ["evil" as never] })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, packages: ["opencode", "opencode"] })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, reverseDependencies: ["core", "core"] })).toEqual(fallback())
+  })
+
   test("falls back for malformed SHAs and paths", () => {
     for (const changes of [
       { baseSHA: "bad" },
