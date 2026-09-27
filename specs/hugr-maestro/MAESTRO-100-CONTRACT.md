@@ -180,9 +180,8 @@ Reconcile  compare plan, context, result, Project, PR, and target SHA
 Close      merge verification -> provenance -> memory -> outcome
 ```
 
-Task/child Session fence requires durable direct-user `ApprovalDecision` bound to same immutable revision, current
-`VALID` validation, `ContextRecord`, and current-evidence identity/hash. Missing, stale, or mismatched item denies
-before child creation.
+Task/child Session fence: require durable direct-user `ApprovalDecision` bound to same immutable revision, current
+`VALID` validation, `ContextRecord`, and current-evidence identity/hash; any mismatch denies before child creation.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and

@@ -31,12 +31,10 @@ bound result became stale. `UN-SEEDED` provider declaration is orientation-only 
 
 ```text
 planRevisionId       immutable proposed revision identity + content hash
-scopeProposalId       immutable ScopeProposal identity + content hash matching revision scope
-canonicalScope        mode-dependent scope from immutable ScopeProposal; explicit exclusions
-scopeMode             `GROUNDED` or `UNGROUNDED` from immutable ScopeProposal
-scopeCapabilityMemoryRecord trusted capability/memory record identity + hash from ScopeProposal
-scopeInspectionSha    inspected SHA from trusted ScopeProposal repository-inspection record; UNGROUNDED only
-scopeInspectionReceiptId immutable inspection receipt identity + content hash from ScopeProposal; UNGROUNDED only
+scopeProposalId       immutable historical ScopeProposal identity + content hash retained by revision
+canonicalScope        immutable mode-dependent scope/boundaries/anchors from PlanRevision ScopeProposal
+scopeMode             immutable `GROUNDED` or `UNGROUNDED` mode from PlanRevision ScopeProposal
+scopeEvidence         historical trusted scope evidence retained by PlanRevision ScopeProposal
 currentCapabilityMemoryRecord trusted current capability/memory record identity + hash
 currentRepositoryInspectionRecord trusted current repository inspection record identity + hash
 anchorVerificationReceiptId stored immutable anchor-verification receipt identity + hash from ScopeProposal; UNGROUNDED only
@@ -50,14 +48,13 @@ An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory for
 
 ## Preconditions
 
-1. Revision and ScopeProposal are committed, immutable, linked, and have matching scope identity/content.
-2. `GROUNDED` scope identifiers resolve through current Atlas territory identity seam and current adapter/version is
-   ratified and test-measured.
-3. `UNGROUNDED` scope trusted evidence has exact `ABSENT` or `BOOTSTRAP` capability/memory record, current inspection SHA, and
-   immutable same-SHA inspection receipt; every non-empty explicit `InspectionBoundary` path and optional symbol
-    matches that receipt and has stored direct-user anchor-verification receipt and resolved path/anchor relation.
-    A symbol-only anchor resolves to exactly one receipt path. Receipt candidates are limited to those verified
-    anchors. It is not treated as territory.
+1. Revision and its ScopeProposal are committed, immutable, linked, and have matching historical scope identity/content.
+2. `GROUNDED` stored territory identifiers, or `UNGROUNDED` stored boundaries/direct-user anchors, revalidate against
+   current trusted capability/inspection evidence. A SHA or evidence receipt change alone does not require new
+   ScopeProposal or revision.
+3. `UNGROUNDED` stored boundaries have non-empty exact `ABSENT` or `BOOTSTRAP` current capability/memory evidence and
+   same-current-SHA inspection receipt; every path and optional symbol revalidates with stored anchor-verification
+   receipt and resolved path/anchor relation. A symbol-only anchor resolves to exactly one current receipt path.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
 treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
@@ -92,19 +89,18 @@ freeze, not foundation source evidence.
 
 ## Procedure After Seam Freeze
 
-1. `context-request-schema-guard` validates exact revision hash, immutable ScopeProposal identity/content,
-   mode-dependent canonical scope, and required evidence.
+1. `context-request-schema-guard` validates exact revision hash, immutable ScopeProposal identity/content, and
+   mode-dependent stored scope/boundaries/anchors.
 2. For `GROUNDED`, read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current
    Atlas proves. For `UNGROUNDED`, bind no Atlas envelope or source.
-3. `context-envelope-guard` reads current trusted capability-memory and repository-inspection identities, verifies
-   their exact identity/hash/mode/receipt/SHA/anchor match with ScopeProposal evidence, then checks grounded envelope version, territory identity, snapshot/address, freshness,
-   truncation receipt, and configured budget evidence; or checks ungrounded ABSENT/BOOTSTRAP capability/memory
-   receipt plus inspection SHA and immutable inspection receipt identity. For every ungrounded boundary, it verifies
-   path and optional symbol against receipt at exact SHA, revalidates stored anchor-verification receipt identity,
-   and verifies persisted resolved path/anchor relation; it holds symbol-only zero/multiple-path resolution;
-   it rejects broad anchors and receipt candidates absent a verified anchor. It never trusts a raw supplied anchor ID,
-   performs no live scan or re-resolution, and does not recreate V1 pack protocol.
-4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
+3. `context-envelope-guard` reads current trusted capability-memory and repository-inspection evidence. It preserves
+   historical ScopeProposal identity and revalidates its stored mode, boundaries, direct-user anchors, and resolved
+   paths against current evidence. It does not require current evidence identity/hash/SHA to equal historical scope
+   evidence: valid SHA-only evidence change creates linked ContextRecord. It holds if stored mode/boundaries/anchors
+   no longer validate, or if requested scope changes; those require `resolve-scope` plus `revise-plan` as appropriate.
+   It never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
+4. Persist immutable linked `ContextRecord` bound to same revision hash and historical ScopeProposal. `validate-plan`
+   receives record identity only.
 
 ## Tools and Guards
 
@@ -118,9 +114,9 @@ freeze, not foundation source evidence.
 | `repository-inspection-read`       | read current trusted inspection identity                    | bounded adapter read           |
 | `atlas-context-envelope-read`      | frozen adapter over measured current Atlas seam            | Atlas read only                |
 | `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
-| `context-request-schema-guard`     | require exact revision/ScopeProposal links                 | before Atlas read              |
-| `context-envelope-guard`           | require current trusted evidence exact match plus envelope/receipt verification | before persistence |
-| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
+| `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
+| `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
+| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No model skill, shell, live scan, scope re-resolution, product edit, Atlas write, member tool, approval, or task
 creation is granted.
@@ -156,8 +152,9 @@ prior plan evidence.
 | UN-SEEDED provider declaration without independent ABSENT/BOOTSTRAP evidence | `HOLD`; preserve declaration identity |
 | UNGROUNDED without complete capability/memory receipt and inspection SHA | `HOLD`; no context binding                         |
 | Empty, glob, directory, repository-wide, or SHA-unbound InspectionBoundary | `HOLD`; no broad fallback                      |
-| Missing/mismatched ScopeProposal or inspection-receipt identity/content | `HOLD`; no re-resolution or live scan             |
-| Changed current mode, capability/inspection receipt, SHA, or anchor binding | `HOLD`; require newly resolved scope/context      |
+| Missing/mismatched historical ScopeProposal or its stored inspection-receipt identity/content | `HOLD`; no re-resolution or live scan |
+| SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
+| Stored mode/boundaries/anchors no longer validate or requested scope changes | `HOLD`; resolve-scope + revise-plan as appropriate |
 | Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
 | Missing/mismatched resolved path/anchor relation or ambiguous symbol-only anchor | `HOLD`; no context binding                 |
 | Duplicate trigger                                            | return stored record                                     |
@@ -167,7 +164,9 @@ prior plan evidence.
 1. Canonical `GROUNDED` revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
 2. V1-shaped territory/pack input is refused; current foundation adapter is only reader.
 3. Empty/uncovered result holds, never fabricates context or unseeded state.
-4. Stale context, changed scope, or changed adapter version requires new linked record before validation.
+4. SHA/evidence refresh with same valid stored scope/boundaries/anchors requires linked new ContextRecord before
+   validation, not ScopeProposal/revision. Changed requested scope or invalid stored mode/boundary/anchor holds for
+   resolve-scope + revise-plan as appropriate.
 5. No result of this method can create a child Session or Task.
 6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
    and bounded `InspectionBoundary` scope produces `UNGROUNDED` ContextRecord; that record contains

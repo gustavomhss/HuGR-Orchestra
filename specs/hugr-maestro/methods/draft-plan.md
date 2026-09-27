@@ -100,7 +100,7 @@ guard success. Hand its identity to `assemble-context`.
 | `plan-revision-write`              | persist proposed revision/lineage                                            | Maestro durable evidence write |
 | `plan-input-link-guard`            | require committed intent/scope/orientation and no prior revision             | before reasoning               |
 | `plan-provenance-guard`            | require field sources, scope binding, visible assumptions, valid v1 identity | before persistence             |
-| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No live Atlas read/write, shell, product edit, external network, member tool, Task creation, approval write, or
 plan validation is granted.

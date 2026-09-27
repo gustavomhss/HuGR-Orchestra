@@ -46,9 +46,8 @@ orient-session -> admit-request -> resolve-scope -> draft-plan(persist PROPOSED 
                -> later Task/child Session
 ```
 
-Task/child Session fence requires durable direct-user `ApprovalDecision` bound to same immutable revision, current
-`VALID` validation, `ContextRecord`, and current-evidence identity/hash. Missing, stale, or mismatched item denies
-before child creation.
+Task/child Session fence: require durable direct-user `ApprovalDecision` bound to same immutable revision, current
+`VALID` validation, `ContextRecord`, and current-evidence identity/hash; any mismatch denies before child creation.
 
 An empty/malformed/stale `OwnPackPlus` is not an `UN-SEEDED` declaration. V2 maps it to `HOLD`; pointers and
 pull-reachable tail name the only valid depth path: another exact `own(unit)` read.

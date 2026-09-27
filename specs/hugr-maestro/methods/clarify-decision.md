@@ -79,7 +79,7 @@ reply re-enters `admit-request`; it is never parsed as approval.
 | `clarification-record-write`       | persist question linked to parent                                   | Maestro durable evidence write |
 | `clarification-need-schema-guard`  | reject malformed parent need                                        | before reasoning               |
 | `clarification-question-guard`     | reject compound/leading/malformed question                          | before persistence/display     |
-| `no-governed-task-before-approval` | require exact durable ApprovalDecision bound to same revision, current VALID validation, ContextRecord, and current-evidence identity/hash; deny missing/stale/mismatch before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
 
 No shell, product edit, external network, Atlas read/write, plan compiler, member tool, or task creation is
 granted.
