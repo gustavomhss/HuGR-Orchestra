@@ -68,7 +68,7 @@ const DOCS = join(ROOT, "docs")
 const KNOWN = new Map(
   process.env.ID_INTEGRITY_ROOT !== undefined
     ? Object.entries(JSON.parse(process.env.ID_INTEGRITY_KNOWN ?? "{}"))
-     : KNOWN_ENTRIES,
+    : KNOWN_ENTRIES,
 )
 
 /**

@@ -22,7 +22,9 @@ import { driftDetect, isGrounded } from "../src/drift.js"
 const OFF_SEAM_IMPORT = /\b(blake3|sha256|sha512|md5|crc32|createHash)\b|node:crypto|@noble\b/
 const hasOffSeamImport = (source: string): boolean => {
   const file = ts.createSourceFile("source.ts", source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS)
-  return file.statements.some((statement) => ts.isImportDeclaration(statement) && OFF_SEAM_IMPORT.test(statement.getText(file)))
+  return file.statements.some(
+    (statement) => ts.isImportDeclaration(statement) && OFF_SEAM_IMPORT.test(statement.getText(file)),
+  )
 }
 
 // ── fixture builders (identical topology to the visible set; held-out data) ────────────────────────────
