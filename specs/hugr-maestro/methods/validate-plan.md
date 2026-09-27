@@ -87,13 +87,13 @@ semantic conflict belongs to stakeholder review or `clarify-decision`.
 ### 3. Persist Verdict
 
 Persist immutable `PlanValidationRecord`: input hashes, policy version, enumerated checks, per-check verdict,
-issue IDs, timestamp, and result. For supplied linked same-mode ContextRecord with changed capability receipt,
-inspection SHA, anchor verification, or current-evidence identity/hash, persist durable
-`SUPERSEDED_FOR_EXECUTION` projection through `execution-eligibility-projection-write` for each existing eligibility
-and its old current-evidence binding, atomically with linked validation. New validation is `VALID` when new evidence passes required
-checks, otherwise `INVALID`; unavailable evidence is `HOLD`. Projections preserve immutable history but revoke old
-execution eligibility. New `VALID` still requires new presentation and direct ApprovalDecision. Only `VALID` yields
-approval eligibility for this exact revision and current-evidence identity/hash.
+issue IDs, timestamp, and result. On policy change, current-evidence change, unavailable required validation/currentness evidence, or any
+non-`VALID` result, atomically replace each existing `ELIGIBLE_FOR_EXECUTION` for affected revision/context binding
+with `SUPERSEDED_FOR_EXECUTION` through `execution-eligibility-projection-write`. New validation is `VALID` when
+new evidence passes required checks, otherwise `INVALID`; unavailable evidence is `HOLD`. Projections preserve
+immutable history but revoke old execution eligibility. Only exact current `VALID` validation plus new presentation
+and direct ApprovalDecision can create fresh eligibility for that revision, ContextRecord, and current-evidence
+identity/hash.
 
 ## Tools and Guards
 
@@ -104,7 +104,7 @@ approval eligibility for this exact revision and current-evidence identity/hash.
 | `current-context-evidence-read`    | verify current trusted capability/inspection binding        | bounded adapter evidence read  |
 | `validation-policy-read`           | load pinned deterministic policy                           | Maestro configuration read     |
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
-| `execution-eligibility-projection-write` | atomically replace existing eligibility with `SUPERSEDED_FOR_EXECUTION` for old ApprovalDecision/current-evidence on changed evidence | validation/currentness lifecycle |
+| `execution-eligibility-projection-write` | atomically replace existing eligibility with `SUPERSEDED_FOR_EXECUTION` on policy/evidence change, unavailable required validation/currentness evidence, or non-`VALID` result | validation/currentness lifecycle |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
 | `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
@@ -117,7 +117,8 @@ write, or task creation is granted.
 This method can refuse mechanical invalidity only. It cannot change a revision, approve a revision, waive a
 failed rule, infer semantic agreement, or turn `INVALID` into stakeholder acceptance.
 `request-approval` is sole `ELIGIBLE_FOR_EXECUTION` creator, atomically with approved decision. Validation/currentness
-lifecycle atomically replaces existing eligibility with `SUPERSEDED_FOR_EXECUTION` on changed evidence.
+lifecycle atomically replaces existing eligibility with `SUPERSEDED_FOR_EXECUTION` on policy/evidence change,
+unavailable required validation/currentness evidence, or non-`VALID` result.
 
 ## Evidence, Output, and Idempotence
 
@@ -135,13 +136,13 @@ resolve-scope and revise-plan before any ContextRecord reaches this method.
 
 | Condition                                                  | Result                                                                                               |
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Missing/empty/malformed policy or check list               | `HOLD`, named validation-instrument failure                                                          |
-| Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
-| Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
+| Missing/empty/malformed policy or check list               | `HOLD`; atomically supersede existing eligibility; named validation-instrument failure              |
+| Missing/unresolvable revision/context evidence             | `HOLD`; atomically supersede existing eligibility; preserve input identity/reason                   |
+| Currentness evidence unavailable                            | `HOLD`; atomically supersede existing eligibility; no approval/task                                 |
 | execution-eligibility-projection-write failure               | `HOLD`; no child creation                                                                           |
 | Prior ContextRecord stale or current evidence unavailable    | route to assemble-context or `HOLD` before validator; no nonexistent refreshed record              |
 | Supplied same-mode ContextRecord with receipt/SHA/anchor change | supersede old approval; validate supplied record under required checks                            |
-| Any freshness change                                         | atomic durable projection; old approval cannot authorize Task/child Session                         |
+| Policy/evidence change or non-`VALID` result                 | atomically supersede existing eligibility; old approval cannot authorize Task/child Session         |
 | Symbol-only anchor zero/multiple-path or resolved-path relation mismatch | `INVALID`; require resolved scope/context                         |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
 | Unknown semantic product conflict                          | remain `VALID` mechanically, rendered as stakeholder-visible uncertainty; never hidden auto-approval |
@@ -175,13 +176,15 @@ resolve-scope and revise-plan before any ContextRecord reaches this method.
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.
 9. Replaying same inputs returns byte-identical stored validation. Changed revision/context/policy yields new
    linked record and never alters prior result.
-10. Unavailable currentness evidence yields `HOLD`. Same-mode SHA, receipt, or anchor change supersedes old approval
-    and requires supplied linked new ContextRecord plus validation; new verdict is `VALID` only when required checks pass.
+10. Unavailable required validation/currentness evidence yields `HOLD` and atomically supersedes existing
+    eligibility. Same-mode SHA, receipt, or anchor change supersedes old eligibility and requires supplied linked
+    new ContextRecord plus validation; new verdict is `VALID` only when required checks pass.
 11. Canonical current-evidence identity/hash changes never replay a prior `VALID`; symbol-only anchor requires one
     receipt path and matching persisted resolved path/anchor relation.
-12. Same-mode freshness change creates `SUPERSEDED_FOR_EXECUTION` projection on existing immutable revision and
-    linked new ContextRecord validation. Mode change requires resolve-scope then revise-plan. Revalidation cannot
-    revive old approval; a new `VALID` still requires new presentation and direct user ApprovalDecision to authorize execution.
+12. Policy change, same-mode freshness change, unavailable required validation/currentness evidence, or non-`VALID`
+    verdict atomically creates `SUPERSEDED_FOR_EXECUTION` projection for existing eligibility. Mode change requires resolve-scope then
+    revise-plan. Revalidation cannot revive old approval; only exact current `VALID` validation plus new presentation
+    and direct user ApprovalDecision creates fresh eligibility.
 
 ## Anti-Overengineering Boundary
 

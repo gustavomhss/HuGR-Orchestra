@@ -24,7 +24,7 @@ This file consolidates Maestro/Atlas delivery state, related CI, relevant PRs, a
 | ------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------- |
 | Maestro agent and admission assessment      | Yes                   | Admission is recorded only through explicit Maestro tool invocation.                   |
 | Approval presentation and decision evidence | Yes                   | Durable plan and validation readers are missing, so presentation is fail-closed.       |
-| Governed Task fence                         | Yes                   | Fence protects explicit governed Task calls only; it does not make public flow usable. |
+| Governed Task fence                         | Yes                   | Historical delivery fence protects explicit governed Task calls only. Current contract requires exact current `ELIGIBLE_FOR_EXECUTION` projection; public flow remains unusable. |
 | Atlas territory catalog implementation      | Yes, inside Atlas     | It is not exported through an installed host boundary.                                 |
 | Static Own snapshot and guard               | Yes                   | Host consumption is not yet canonical/freshness-verified.                              |
 | GitHub App fallback                         | Yes                   | Fork uses workflow token; App remains supported when fully configured.                 |
@@ -154,7 +154,8 @@ Maestro V2 is ready for governed Atlas-backed work only when all conditions hold
 2. Plan, validation, context, policy, actor, and task intent are immutable and exact-bound.
 3. Catalog and Own context cross only installed, read-only, verified boundaries.
 4. Every unknown, stale, malformed, cross-project, or cross-session path returns named HOLD before Task creation.
-5. Governed Task dispatches once from exact durable approval evidence.
+5. Governed Task dispatches once from exact current `ELIGIBLE_FOR_EXECUTION` projection bound to durable decision,
+   immutable revision, `VALID` validation, ContextRecord, and current-evidence hash.
 6. Current-base Linux and Windows evidence is green, including root-cause closure for required CI defects.
 7. Independent review verifies contracts, implementation, and mutation probes.
 
