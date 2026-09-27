@@ -469,6 +469,15 @@ describe("Maestro governed lifecycle", () => {
       })
       yield* events.publish(MaestroEvent.Approval.Decided, {
         ...governed,
+        planRevisionID: "plan_conflict",
+        presentationID: "apr_conflict",
+        presentationMessageID: "msg_presentation",
+        methodVersion: "request-approval-v1",
+        outcome: "APPROVED",
+        decisionTime: Date.now() - 1,
+      })
+      yield* events.publish(MaestroEvent.Approval.Decided, {
+        ...governed,
         presentationID: "apr_01",
         presentationMessageID: "msg_presentation",
         methodVersion: "request-approval-v1",
@@ -498,6 +507,21 @@ describe("Maestro governed lifecycle", () => {
         },
       )
       expect(yield* sessions.children(chat.id)).toHaveLength(1)
+      const database = yield* Database.Service
+      const receipt = yield* database.db
+        .select({ data: EventTable.data })
+        .from(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, chat.id),
+            eq(EventTable.type, EventV2.versionedType(MaestroEvent.Approval.ConsumedV2.type, 2)),
+          ),
+        )
+        .get()
+        .pipe(Effect.orDie)
+      expect(Schema.decodeUnknownSync(MaestroEvent.Approval.ConsumedV2.data)(receipt!.data).presentationID).toBe(
+        "apr_01",
+      )
       const repeated = { ...governed, approvalMessageID: "msg_approve_again" }
       yield* events.publish(MaestroEvent.Approval.Decided, {
         ...repeated,

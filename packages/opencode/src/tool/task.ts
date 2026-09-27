@@ -293,8 +293,18 @@ export const TaskTool = Tool.define(
           return yield* Effect.fail(new Error(`Governed Task denied: ${verdict.reason}`))
         const approvedDecision = decisionEvents.find(
           (decision) =>
-            decision.approvalMessageID === governed.approvalMessageID && decision.taskHash === governed.taskHash,
-        )!
+            decision.outcome === "APPROVED" &&
+            decision.approvalMessageID === governed.approvalMessageID &&
+            decision.presentationID === newestPresentationID &&
+            decision.planRevisionID === governed.planRevisionID &&
+            decision.revisionHash === governed.revisionHash &&
+            decision.validationRecordID === governed.validationRecordID &&
+            decision.validationHash === governed.validationHash &&
+            decision.contextHash === governed.contextHash &&
+            decision.policyHash === governed.policyHash &&
+            decision.taskHash === governed.taskHash,
+        )
+        if (!approvedDecision) return yield* Effect.fail(new Error("Governed Task denied: approved-decision-missing"))
         const consumed = yield* database.db
           .select({ data: EventTable.data })
           .from(EventTable)
