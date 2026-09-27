@@ -65,13 +65,13 @@ every atlas address appears in bound GROUNDED ContextRecord
 UNGROUNDED revision contains no atlas source tag
 UNGROUNDED ContextRecord has ABSENT/BOOTSTRAP capability/memory receipt and current inspection SHA
 UNGROUNDED ContextRecord persists matching ScopeProposal and inspection-receipt identities
-UNGROUNDED ContextRecord persists direct-stakeholder evidence identity/anchor for every InspectionBoundary
+UNGROUNDED ContextRecord persists stored anchor-verification receipt identity matching ScopeProposal binding
 assumptions contain every maestro-sourced unconfirmed decision
 revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
 canonical scope inclusion/exclusion sets do not intersect
 GROUNDED scope contains typed canonical territory identifiers only
-UNGROUNDED scope contains non-empty explicit receipt-verified, direct-stakeholder-anchored SHA-bound InspectionBoundary list plus exclusions, never territory
+UNGROUNDED scope contains non-empty explicit receipt-verified, direct-user-anchored SHA-bound InspectionBoundary list plus exclusions, never territory
 ```
 
 Scope rules are mode-dependent: territory checks act only on `GROUNDED` identifiers; boundary checks act only on
@@ -142,8 +142,8 @@ overwrite prior decision evidence.
    may otherwise validate structurally. `UN-SEEDED` remains orientation-only.
 4. `UNGROUNDED` ContextRecord missing or mismatching ScopeProposal or inspection-receipt identity yields `INVALID`;
    replay cannot substitute a later boundary receipt.
-5. Missing direct-stakeholder evidence/anchor for a boundary, or project-wide/repository-wide receipt anchor, yields
-   `INVALID`; receipt-wide enumeration cannot reach validation.
+5. Missing/mismatched stored anchor-verification receipt identity, or project-wide/repository-wide receipt anchor,
+   yields `INVALID`; receipt-wide enumeration cannot reach validation.
 6. Empty, absolute, traversal, glob, directory, Atlas-bearing, receipt-missing, symbol-unmatched, or SHA-mismatched
    `InspectionBoundary` yields `INVALID`; it never becomes a canonical territory or generic repository scan.
 7. Missing, empty, or malformed policy/check list yields `HOLD`, not a green empty validation.
