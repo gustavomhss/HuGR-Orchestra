@@ -96,7 +96,7 @@ direct user approval can authorize execution.
 | `current-context-evidence-read`    | verify exact ContextRecord currentness before display/decision            | bounded adapter evidence read       |
 | `session-message-read`             | verify direct user reply, order, role, and current presentation           | OpenCode durable conversation read  |
 | `session-message-write`            | persist exact visible approval target                                     | OpenCode durable conversation write |
-| `approval-decision-write`          | later: append immutable conversation decision                             | only with first governed Task slice |
+| `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
 | `no-governed-task-before-approval` | require exact current VALID validation and approval decision bound to same current-evidence identity/hash; reject mismatch before child creation | Session/Task boundary |
@@ -111,9 +111,11 @@ and records it. Maestro/member/model/tool output cannot approve itself or infer 
 
 ## Evidence, Output, and Idempotence
 
-`ApprovalPresentation` is durable assistant Session message evidence. A later governed Task slice adds one immutable
-`ApprovalDecision` event storing ordered presentation/user message IDs and exact revision/validation hashes. No
-PlanRevision or PlanValidationRecord table is introduced until those methods have a real runtime consumer.
+`ApprovalPresentation` is durable assistant Session message evidence. `request-approval` appends one immutable
+`ApprovalDecision` after a valid direct reply, storing ordered presentation/user message IDs, exact
+revision/validation hashes, and current-evidence identity/hash. It is prerequisite to every later governed Task;
+Task fence reads existing exact decision/current evidence only. No PlanRevision or PlanValidationRecord table is
+introduced until those methods have a real runtime consumer.
 
 Presentation deduplication key is `(planRevisionId, validationRecordId, sessionId, methodVersion)`. Decision
 deduplication key is `(approvalMessageId, methodVersion)`. Same reply returns stored decision. Reusing one reply
@@ -144,7 +146,7 @@ message against different presentation/revision holds with visible mismatch reas
 ## Acceptance
 
 1. User sees exact v3 and replies explicit `aprovo`/`approve`; `APPROVED` records same presentation/revision/
-   validation hashes and user message ID. No Task is created here.
+   validation hashes, current-evidence identity/hash, and user message ID before any Task. No Task is created here.
 2. One-file plan has same direct explicit conversation approval as larger plan.
 3. Scope, acceptance, constraint, review, context, or policy change invalidates old approval and requires new
    displayed revision plus user reply.
@@ -162,6 +164,6 @@ message against different presentation/revision holds with visible mismatch reas
 
 ## Anti-Overengineering Boundary
 
-One durable presentation message, one later conversation decision event, two guards, four results. No external auth,
+One durable presentation message, one approval-method conversation decision event, two guards, four results. No external auth,
 GitHub workflow, PlanRevision/PlanValidation tables, sentiment parser, silent timeout approval, task creation, fast
 path, or campaign approval.
