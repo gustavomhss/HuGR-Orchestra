@@ -148,8 +148,9 @@ message against different presentation/revision holds with visible mismatch reas
 1. User sees exact v3 and replies explicit `aprovo`/`approve`; `APPROVED` records same presentation/revision/
    validation hashes, current-evidence identity/hash, and user message ID before any Task. No Task is created here.
 2. One-file plan has same direct explicit conversation approval as larger plan.
-3. Scope, acceptance, constraint, review, context, or policy change invalidates old approval and requires new
-   displayed revision plus user reply.
+3. Scope, acceptance, constraint, review, or policy field change invalidates old approval and requires new displayed
+   revision plus user reply. Context freshness requires new ContextRecord, validation, presentation, and user reply
+   on same immutable revision.
 4. “Looks good”, assistant text, tool output, unrelated user message, stale presentation, altered hash, silence,
    or changed-plan discussion cannot produce `APPROVED`.
 5. User decline/cancel records `DECLINED` visibly and creates no governed work.
