@@ -51,6 +51,7 @@ export type Event =
   | EventMaestroApprovalPresented
   | EventMaestroApprovalDecided
   | EventMaestroApprovalConsumed
+  | EventMaestroApprovalReserved
   | EventMaestroAdmissionDecided
   | EventMessagePartDelta
   | EventSessionDiff
@@ -1256,6 +1257,29 @@ export type GlobalEvent = {
           approvalMessageID: string
           taskHash: string
           callID: string
+          childSessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "maestro.approval.reserved"
+        properties: {
+          sessionID: string
+          presentationID: string
+          approvalMessageID: string
+          projectID: string
+          memberID: string
+          planRevisionID: string
+          validationRecordID: string
+          revisionHash: string
+          validationHash: string
+          contextHash: string
+          policyHash: string
+          taskHash: string
+          callID: string
+          childSessionID: string
+          parentSessionID: string
+          agent: string
         }
       }
     | {
@@ -1734,6 +1758,7 @@ export type GlobalEvent = {
     | SyncEventMaestroApprovalPresented
     | SyncEventMaestroApprovalDecided
     | SyncEventMaestroApprovalConsumed
+    | SyncEventMaestroApprovalReserved
     | SyncEventMaestroAdmissionDecided
 }
 
@@ -3002,6 +3027,7 @@ export type V2Event =
   | MaestroApprovalPresented
   | MaestroApprovalDecided
   | MaestroApprovalConsumed
+  | MaestroApprovalReserved
   | MaestroAdmissionDecided
   | MessagePartDelta
   | SessionDiff
@@ -4001,7 +4027,7 @@ export type SyncEventMaestroApprovalConsumed = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "maestro.approval.consumed.1"
+    type: "maestro.approval.consumed.2"
     id: string
     seq: number
     aggregateID: string
@@ -4011,6 +4037,36 @@ export type SyncEventMaestroApprovalConsumed = {
       approvalMessageID: string
       taskHash: string
       callID: string
+      childSessionID: string
+    }
+  }
+}
+
+export type SyncEventMaestroApprovalReserved = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "maestro.approval.reserved.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      presentationID: string
+      approvalMessageID: string
+      projectID: string
+      memberID: string
+      planRevisionID: string
+      validationRecordID: string
+      revisionHash: string
+      validationHash: string
+      contextHash: string
+      policyHash: string
+      taskHash: string
+      callID: string
+      childSessionID: string
+      parentSessionID: string
+      agent: string
     }
   }
 }
@@ -5617,6 +5673,39 @@ export type MaestroApprovalConsumed = {
     approvalMessageID: string
     taskHash: string
     callID: string
+    childSessionID: string
+  }
+}
+
+export type MaestroApprovalReserved = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "maestro.approval.reserved"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    presentationID: string
+    approvalMessageID: string
+    projectID: string
+    memberID: string
+    planRevisionID: string
+    validationRecordID: string
+    revisionHash: string
+    validationHash: string
+    contextHash: string
+    policyHash: string
+    taskHash: string
+    callID: string
+    childSessionID: string
+    parentSessionID: string
+    agent: string
   }
 }
 
@@ -7073,6 +7162,30 @@ export type EventMaestroApprovalConsumed = {
     approvalMessageID: string
     taskHash: string
     callID: string
+    childSessionID: string
+  }
+}
+
+export type EventMaestroApprovalReserved = {
+  id: string
+  type: "maestro.approval.reserved"
+  properties: {
+    sessionID: string
+    presentationID: string
+    approvalMessageID: string
+    projectID: string
+    memberID: string
+    planRevisionID: string
+    validationRecordID: string
+    revisionHash: string
+    validationHash: string
+    contextHash: string
+    policyHash: string
+    taskHash: string
+    callID: string
+    childSessionID: string
+    parentSessionID: string
+    agent: string
   }
 }
 
@@ -9924,6 +10037,7 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
+    id?: string
     parentID?: string
     title?: string
     agent?: string

@@ -222,38 +222,40 @@ describe("Maestro governed lifecycle", () => {
       yield* sessions.updateMessage(dispatchMessage)
       const tool = yield* TaskTool
       const def = yield* tool.init()
-      yield* def.execute(
-        {
-          description: "implement dark mode",
-          prompt: "implement dark mode",
-          subagent_type: "general",
-          governed: {
-            sessionID: chat.id,
-            projectID: chat.projectID,
-            memberID: "maestro",
-            approvalMessageID: approval.decision.approvalMessageID,
-            planRevisionID: approval.decision.planRevisionID,
-            revisionHash: approval.decision.revisionHash,
-            validationRecordID: approval.decision.validationRecordID,
-            validationHash: approval.decision.validationHash,
-            contextHash: approval.decision.contextHash,
-            policyHash: approval.decision.policyHash,
-            taskHash: approval.decision.taskHash,
-          },
-        },
-        {
+      const input = {
+        description: "implement dark mode",
+        prompt: "implement dark mode",
+        subagent_type: "general",
+        governed: {
           sessionID: chat.id,
-          messageID: dispatchMessage.id,
-          callID: "call_task_01",
-          agent: "maestro",
-          abort: new AbortController().signal,
-          extra: { promptOps: stubOps() },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
+          projectID: chat.projectID,
+          memberID: "maestro",
+          approvalMessageID: approval.decision.approvalMessageID,
+          planRevisionID: approval.decision.planRevisionID,
+          revisionHash: approval.decision.revisionHash,
+          validationRecordID: approval.decision.validationRecordID,
+          validationHash: approval.decision.validationHash,
+          contextHash: approval.decision.contextHash,
+          policyHash: approval.decision.policyHash,
+          taskHash: approval.decision.taskHash,
         },
-      )
-      expect(yield* sessions.children(chat.id)).toHaveLength(1)
+      }
+      const context = {
+        sessionID: chat.id,
+        messageID: dispatchMessage.id,
+        callID: "call_task_01",
+        agent: "maestro",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps() },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const first = yield* def.execute(input, context)
+      const retry = yield* def.execute(input, context)
+      const children = yield* sessions.children(chat.id)
+      expect(children).toHaveLength(1)
+      expect(retry.metadata.sessionId).toBe(first.metadata.sessionId)
     }),
   )
 
