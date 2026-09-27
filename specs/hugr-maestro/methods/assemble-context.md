@@ -117,10 +117,10 @@ freeze, not foundation source evidence.
 | `repository-inspection-read`       | read current trusted inspection identity                    | bounded adapter read           |
 | `atlas-context-envelope-read`      | frozen adapter over measured current Atlas seam            | Atlas read only                |
 | `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
-| `execution-eligibility-projection-write` | invoke sole durable projection owner on changed current evidence | atomic with context write |
+| `execution-eligibility-projection-write` | atomically replace existing eligibility with `SUPERSEDED_FOR_EXECUTION` on changed current evidence | atomic with context write |
 | `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
 | `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
-| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
+| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
 
 No model skill, shell, live scan, scope re-resolution, product edit, Atlas write, member tool, approval, or task
 creation is granted.

@@ -89,8 +89,8 @@ semantic conflict belongs to stakeholder review or `clarify-decision`.
 Persist immutable `PlanValidationRecord`: input hashes, policy version, enumerated checks, per-check verdict,
 issue IDs, timestamp, and result. For supplied linked same-mode ContextRecord with changed capability receipt,
 inspection SHA, anchor verification, or current-evidence identity/hash, persist durable
-`SUPERSEDED_FOR_EXECUTION` projection through `execution-eligibility-projection-write` for each prior approval
-decision and its old current-evidence binding, atomically with linked validation. New validation is `VALID` when new evidence passes required
+`SUPERSEDED_FOR_EXECUTION` projection through `execution-eligibility-projection-write` for each existing eligibility
+and its old current-evidence binding, atomically with linked validation. New validation is `VALID` when new evidence passes required
 checks, otherwise `INVALID`; unavailable evidence is `HOLD`. Projections preserve immutable history but revoke old
 execution eligibility. New `VALID` still requires new presentation and direct ApprovalDecision. Only `VALID` yields
 approval eligibility for this exact revision and current-evidence identity/hash.
@@ -104,10 +104,10 @@ approval eligibility for this exact revision and current-evidence identity/hash.
 | `current-context-evidence-read`    | verify current trusted capability/inspection binding        | bounded adapter evidence read  |
 | `validation-policy-read`           | load pinned deterministic policy                           | Maestro configuration read     |
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
-| `execution-eligibility-projection-write` | sole durable owner: atomically write `SUPERSEDED_FOR_EXECUTION` for old ApprovalDecision/current-evidence on changed evidence | validation/currentness lifecycle |
+| `execution-eligibility-projection-write` | atomically replace existing eligibility with `SUPERSEDED_FOR_EXECUTION` for old ApprovalDecision/current-evidence on changed evidence | validation/currentness lifecycle |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
-| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
+| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
 
 No model skill, Atlas read/write, shell, product edit, external network, member tool, plan mutation, approval
 write, or task creation is granted.
@@ -116,8 +116,8 @@ write, or task creation is granted.
 
 This method can refuse mechanical invalidity only. It cannot change a revision, approve a revision, waive a
 failed rule, infer semantic agreement, or turn `INVALID` into stakeholder acceptance.
-`execution-eligibility-projection-write` is sole durable projection owner. Validation/currentness lifecycle invokes
-it atomically on changed evidence; request-approval writes ApprovalDecision only.
+`request-approval` is sole `ELIGIBLE_FOR_EXECUTION` creator, atomically with approved decision. Validation/currentness
+lifecycle atomically replaces existing eligibility with `SUPERSEDED_FOR_EXECUTION` on changed evidence.
 
 ## Evidence, Output, and Idempotence
 

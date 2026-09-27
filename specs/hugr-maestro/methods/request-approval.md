@@ -17,8 +17,8 @@ DECLINED  explicit user decline/cancel bound to exact revision
 HOLD      evidence/reply relation/current state is ambiguous or invalid
 ```
 
-`APPROVED` makes only that revision eligible for later governed work. No Task, child Session, work packet, or
-dispatch happens in this method.
+`APPROVED` atomically persists immutable decision and frozen `ELIGIBLE_FOR_EXECUTION` projection for later governed
+work. No Task, child Session, work packet, or dispatch happens in this method.
 
 ## Trigger
 
@@ -79,15 +79,15 @@ Initial V2 kernel recognizes only normalized exact commands: `approve`/`aprovo` 
 `decline`/`declino`/`cancel`/`cancelar`, optionally followed by `.` or `!`. Any broader natural-language grammar
 needs an explicit acceptance case before it can decide.
 
-### 3. Record Immutable Decision
+### 3. Record Immutable Decision and Eligibility
 
-For approve/decline, persist `ApprovalDecision` with ComposedActor, user reply message ID, presentation ID, decision,
-plan+validation/context record identities/hashes, exact `currentEvidenceIdentityHash`, policy/context versions, and
-timestamp. Any freshness change receives durable `SUPERSEDED_FOR_EXECUTION` projection: old decision remains
-immutable history, cannot authorize Task/child Session, and transfers nowhere.
-`execution-eligibility-projection-write` in validation/currentness lifecycle writes that projection;
-request-approval writes ApprovalDecision only and never persists revocation. Only new context, validation,
-presentation, and direct user approval can authorize execution.
+For approve, atomically persist immutable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` projection bound to that
+decision, exact revision, current `VALID` validation, ContextRecord, and `currentEvidenceIdentityHash`. Decline
+persists only immutable `ApprovalDecision`. Projection write failure is `HOLD`; no Task. This is sole
+eligible-projection creation. Currentness, validation, and revision-transition owners atomically replace eligibility
+with `SUPERSEDED_FOR_EXECUTION` on mismatch/change. Old decision remains immutable history, cannot authorize
+Task/child Session, and transfers nowhere. Only new context, validation, presentation, and direct user approval can
+authorize execution.
 
 ## Tools and Guards
 
@@ -99,9 +99,10 @@ presentation, and direct user approval can authorize execution.
 | `session-message-read`             | verify direct user reply, order, role, and current presentation           | OpenCode durable conversation read  |
 | `session-message-write`            | persist exact visible approval target                                     | OpenCode durable conversation write |
 | `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
+| `execution-eligibility-projection-write` | atomically create `ELIGIBLE_FOR_EXECUTION` for approved exact current decision binding | with approval decision write |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
+| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` projection bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
@@ -113,11 +114,12 @@ and records it. Maestro/member/model/tool output cannot approve itself or infer 
 
 ## Evidence, Output, and Idempotence
 
-`ApprovalPresentation` is durable assistant Session message evidence. `request-approval` appends one immutable
-`ApprovalDecision` after a valid direct reply, storing ordered presentation/user message IDs, exact
-revision/validation hashes, and current-evidence identity/hash. It is prerequisite to every later governed Task;
-Task fence reads existing exact decision/current evidence only. No PlanRevision or PlanValidationRecord table is
-introduced until those methods have a real runtime consumer.
+`ApprovalPresentation` is durable assistant Session message evidence. After valid direct approve,
+`request-approval` atomically appends immutable `ApprovalDecision` and its frozen `ELIGIBLE_FOR_EXECUTION`
+projection, storing ordered presentation/user message IDs, exact revision/validation hashes, ContextRecord, and
+current-evidence identity/hash. It is prerequisite to every later governed Task; Task fence reads exact current
+projection only. No PlanRevision or PlanValidationRecord table is introduced until those methods have a real runtime
+consumer.
 
 Presentation deduplication key is `(planRevisionId, validationRecordId, sessionId, methodVersion)`. Decision
 deduplication key is `(approvalMessageId, methodVersion)`. Same reply returns stored decision. Reusing one reply
@@ -130,7 +132,8 @@ message against different presentation/revision holds with visible mismatch reas
 | Unavailable current-context evidence                                                        | `HOLD`; no presentation or decision                                               |
 | Changed mode/capability receipt/SHA/anchor/current-evidence identity                          | `HOLD` before presentation/decision; validation/currentness lifecycle owns revocation |
 | Validation/approval current-evidence mismatch                                                  | `HOLD`; named mismatch rejection before child creation                            |
-| Missing/stale execution-eligibility projection                                                  | deny Task/child Session before child creation                                     |
+| Eligible-projection write failure                                                                | `HOLD`; no Task/child Session                                                     |
+| Missing/superseded/mismatched execution-eligibility projection                                  | deny Task/child Session before child creation                                     |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
@@ -164,8 +167,10 @@ message against different presentation/revision holds with visible mismatch reas
 8. Current-context verification is required before presentation and decision. Same-mode SHA, receipt, or anchor
    binding change requires new ContextRecord, validation, presentation, and direct ApprovalDecision on same immutable
    revision; mode change requires resolve-scope then revise-plan. Unavailable verification holds.
-9. Task/child Session fence requires exact current `VALID` validation and approved decision bound to same
-   `currentEvidenceIdentityHash`. Freshness change supersedes old approval; revalidation cannot reactivate it.
+9. Direct approval atomically creates only exact current `ELIGIBLE_FOR_EXECUTION` bound to decision, revision,
+   `VALID` validation, ContextRecord, and `currentEvidenceIdentityHash`; Task/child Session fence denies absent,
+   superseded, or mismatched projection before child creation. Freshness change supersedes old eligibility;
+   revalidation cannot reactivate it.
 
 ## Anti-Overengineering Boundary
 
