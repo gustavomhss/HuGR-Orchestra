@@ -24,8 +24,10 @@ HOLD      lineage/context/change evidence invalid; no revision/task
 Stakeholder requests an alteration, `validate-plan` returns `INVALID`, or plan owner explicitly requests revision
 of a current proposal/approval that changes plan fields. `resolve-scope` supplies successor scope before this method
 when scope may change. Validation remediation enters this method only when it changes plan fields. A capability,
-inspection, or current-evidence freshness change creates no vN+1: unchanged revision re-enters `assemble-context`,
-then linked validation, presentation, and direct ApprovalDecision.
+inspection, receipt, SHA, or current-evidence freshness change within same mode creates no vN+1: unchanged revision
+re-enters `assemble-context`, then linked validation, presentation, and direct ApprovalDecision. GROUNDED↔UNGROUNDED
+mode change alters ScopeProposal shape/authority evidence and requires `resolve-scope` then `revise-plan`, or
+clarification when scope cannot be honestly resolved.
 
 ## Inputs
 
@@ -68,9 +70,10 @@ binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta 
 successor address, ownership, or fact. `UNGROUNDED` successor preserves its `InspectionBoundary` list and exclusions
 as mode-dependent scope, never canonical territory.
 It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by durable projection, not deleted or
-rewritten. Freshness change (mode, capability receipt, inspection SHA, anchor verification, or current-evidence
+rewritten. Same-mode freshness change (capability receipt, inspection SHA, anchor verification, or current-evidence
 identity/hash) is not a revision: it supersedes old approval and keeps vN for linked ContextRecord, validation,
-presentation, and direct ApprovalDecision. Only plan-field change creates vN+1.
+presentation, and direct ApprovalDecision. Mode change requires new ScopeProposal then vN+1. Only plan-field or
+mode/authority shape change creates vN+1.
 
 ### 3. Guard and Persist
 
@@ -142,8 +145,9 @@ selects one, never auto-merge.
 6. GROUNDED or UNGROUNDED successor evidence is accepted only under its exact mode rules; successor context assembly
    always precedes validation, no pre-bind Atlas-sourced successor fact is accepted, and ungrounded scope remains
    bounded `InspectionBoundary` entries plus exclusions.
-7. Freshness-only mode, receipt, SHA, anchor, or current-evidence change does not create vN+1; it supersedes old
+7. Same-mode receipt, SHA, anchor, or current-evidence freshness change does not create vN+1; it supersedes old
    approval and rebinds context, validation, presentation, and direct approval on existing immutable revision.
+   GROUNDED↔UNGROUNDED mode change requires resolve-scope then revise-plan, or clarification.
 
 ## Anti-Overengineering Boundary
 

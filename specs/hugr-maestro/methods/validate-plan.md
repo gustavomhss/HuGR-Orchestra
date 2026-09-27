@@ -20,16 +20,17 @@ HOLD     required evidence/context cannot be checked; no approval/task
 
 ## Trigger
 
-Committed `PlanRevision` status is `PROPOSED`, or recovery needs to revalidate a proposed revision after
-context freshness changes.
+Committed `PlanRevision` status is `PROPOSED` with supplied exact current `ContextRecord` and current-evidence
+binding. Detection that prior ContextRecord is stale routes to `assemble-context` or `HOLD` before this method;
+validator never claims to validate a nonexistent refreshed record.
 
 ## Inputs
 
 ```text
 planRevisionId       immutable PROPOSED revision identity
 planRevision         complete revision fields and field provenance
-contextRecord        current bound GROUNDED or UNGROUNDED ContextRecord
-currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
+contextRecord        supplied exact current GROUNDED or UNGROUNDED ContextRecord
+currentContextEvidence supplied current trusted capability/inspection verification for that ContextRecord binding
 currentEvidenceIdentityHash canonical current-evidence identity + hash for ContextRecord mode/SHA/receipt/anchor binding
 priorApprovalDecisions immutable approval decisions for this revision, if any
 priorRevision        optional immutable parent revision
@@ -86,9 +87,9 @@ semantic conflict belongs to stakeholder review or `clarify-decision`.
 ### 3. Persist Verdict
 
 Persist immutable `PlanValidationRecord`: input hashes, policy version, enumerated checks, per-check verdict,
-issue IDs, timestamp, and result. Any changed mode, capability receipt, inspection SHA, anchor verification, or
-current-evidence identity/hash persists durable `SUPERSEDED_FOR_EXECUTION` projection for each prior approval
-decision and linked validation for new ContextRecord. New validation is `VALID` when new evidence passes required
+issue IDs, timestamp, and result. For supplied linked same-mode ContextRecord with changed capability receipt,
+inspection SHA, anchor verification, or current-evidence identity/hash, persist durable
+`SUPERSEDED_FOR_EXECUTION` projection for each prior approval decision and linked validation. New validation is `VALID` when new evidence passes required
 checks, otherwise `INVALID`; unavailable evidence is `HOLD`. Projections preserve immutable history but revoke old
 execution eligibility. New `VALID` still requires new presentation and direct ApprovalDecision. Only `VALID` yields
 approval eligibility for this exact revision and current-evidence identity/hash.
@@ -122,8 +123,9 @@ failure from looking like a clean empty result.
 
 Deduplication key is `(planRevisionId, contextRecordId, currentEvidenceIdentityHash, validationPolicyVersion,
 methodVersion)`. Replay returns stored verdict only for exact canonical current-evidence identity/hash. Current
-capability/inspection mode, SHA, receipt, or anchor binding change creates linked new validation record under its
-own required checks; it never replays prior `VALID` or overwrites prior decision evidence.
+same-mode capability/inspection SHA, receipt, or anchor binding change creates linked new validation record under
+its own required checks; it never replays prior `VALID` or overwrites prior decision evidence. Mode change requires
+resolve-scope and revise-plan before any ContextRecord reaches this method.
 
 ## Refusal and Recovery
 
@@ -132,7 +134,8 @@ own required checks; it never replays prior `VALID` or overwrites prior decision
 | Missing/empty/malformed policy or check list               | `HOLD`, named validation-instrument failure                                                          |
 | Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
 | Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
-| Current mode/SHA/receipt/anchor binding changed             | supersede old approval; validate linked new ContextRecord under required checks                     |
+| Prior ContextRecord stale or current evidence unavailable    | route to assemble-context or `HOLD` before validator; no nonexistent refreshed record              |
+| Supplied same-mode ContextRecord with receipt/SHA/anchor change | supersede old approval; validate supplied record under required checks                            |
 | Any freshness change                                         | durable `SUPERSEDED_FOR_EXECUTION` projection; old approval cannot authorize Task/child Session    |
 | Symbol-only anchor zero/multiple-path or resolved-path relation mismatch | `INVALID`; require resolved scope/context                         |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
@@ -167,13 +170,13 @@ own required checks; it never replays prior `VALID` or overwrites prior decision
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.
 9. Replaying same inputs returns byte-identical stored validation. Changed revision/context/policy yields new
    linked record and never alters prior result.
-10. Unavailable currentness evidence yields `HOLD`. Changed mode, SHA, receipt, or anchor binding supersedes old
-    approval and requires linked new ContextRecord plus validation; new verdict is `VALID` only when required checks pass.
+10. Unavailable currentness evidence yields `HOLD`. Same-mode SHA, receipt, or anchor change supersedes old approval
+    and requires supplied linked new ContextRecord plus validation; new verdict is `VALID` only when required checks pass.
 11. Canonical current-evidence identity/hash changes never replay a prior `VALID`; symbol-only anchor requires one
     receipt path and matching persisted resolved path/anchor relation.
-12. Freshness change creates `SUPERSEDED_FOR_EXECUTION` projection on existing immutable revision and linked new
-    ContextRecord validation. Revalidation cannot revive old approval; a new `VALID` still requires new presentation
-    and direct user ApprovalDecision to authorize execution.
+12. Same-mode freshness change creates `SUPERSEDED_FOR_EXECUTION` projection on existing immutable revision and
+    linked new ContextRecord validation. Mode change requires resolve-scope then revise-plan. Revalidation cannot
+    revive old approval; a new `VALID` still requires new presentation and direct user ApprovalDecision to authorize execution.
 
 ## Anti-Overengineering Boundary
 
