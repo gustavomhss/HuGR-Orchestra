@@ -17,8 +17,9 @@ export type CompileVerificationPlanInput = {
   baseSHA: string
   headSHA: string
   changedPaths: readonly string[]
-  risk: "docs" | "package" | "workflow" | "api" | "persistence" | "security" | "unknown"
+  risk: "docs" | "package" | "workflow" | "api" | "persistence" | "security" | "concurrency" | "unknown"
   packages: readonly PackageID[]
+  reverseDependencies: readonly PackageID[]
 }
 
 export type VerificationPlan = {
@@ -39,9 +40,14 @@ export function compileVerificationPlan(input: CompileVerificationPlanInput): Ve
     return fallback(input)
   }
 
-  if (["unknown", "api", "persistence", "security"].includes(input.risk)) return fallback(input)
+  if (["unknown", "api", "persistence", "security", "concurrency"].includes(input.risk)) return fallback(input)
 
-  if (input.risk === "workflow") return selected(input, ["godfile", "generated", "linux-unit", "windows-unit"])
+  if (input.risk === "workflow") {
+    if (!input.changedPaths.every((path) => path.startsWith(".github/workflows/") || path === "script/godfile.ts")) {
+      return fallback(input)
+    }
+    return selected(input, ["godfile", "generated", "linux-unit", "windows-unit"])
+  }
 
   if (input.risk === "docs") {
     if (!input.changedPaths.every((path) => path.endsWith(".md"))) return fallback(input)
@@ -55,7 +61,10 @@ export function compileVerificationPlan(input: CompileVerificationPlanInput): Ve
     return fallback(input)
   }
 
-  return selected(input, [...new Set(input.packages.map((pkg) => `${pkg}-unit` as CheckID)), "linux-unit"])
+  return selected(input, [
+    ...new Set([...input.packages, ...input.reverseDependencies].map((pkg) => `${pkg}-unit` as CheckID)),
+    "linux-unit",
+  ])
 }
 
 function validSHA(value: string) {

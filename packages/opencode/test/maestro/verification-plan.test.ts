@@ -11,6 +11,7 @@ const input: CompileVerificationPlanInput = {
   changedPaths: ["packages/opencode/src/index.ts"],
   risk: "package",
   packages: ["opencode"],
+  reverseDependencies: [],
 }
 
 const allChecks = [
@@ -50,12 +51,13 @@ describe("compileVerificationPlan", () => {
     )
   })
 
-  test("selects affected package checks plus Linux", () => {
+  test("selects affected package and reverse dependency checks plus Linux", () => {
     expect(
       compileVerificationPlan({
         ...input,
-        changedPaths: ["packages/core/src/index.ts", "packages/opencode/test/index.ts"],
-        packages: ["opencode", "core"],
+        changedPaths: ["packages/core/src/index.ts"],
+        packages: ["core"],
+        reverseDependencies: ["opencode"],
       }),
     ).toEqual({
       baseSHA: input.baseSHA,
@@ -79,7 +81,7 @@ describe("compileVerificationPlan", () => {
   })
 
   test("selects workflow checks", () => {
-    expect(compileVerificationPlan({ ...input, risk: "workflow" })).toEqual({
+    expect(compileVerificationPlan({ ...input, changedPaths: [".github/workflows/ci.yml"], risk: "workflow" })).toEqual({
       baseSHA: input.baseSHA,
       headSHA: input.headSHA,
       required: ["generated", "godfile", "linux-unit", "windows-unit"],
@@ -94,8 +96,12 @@ describe("compileVerificationPlan", () => {
     })
   })
 
+  test("falls back when workflow risk includes incoherent path", () => {
+    expect(compileVerificationPlan({ ...input, risk: "workflow" })).toEqual(fallback())
+  })
+
   test("falls back for unknown and elevated risks", () => {
-    for (const risk of ["unknown", "api", "persistence", "security"] as const) {
+    for (const risk of ["unknown", "api", "persistence", "security", "concurrency"] as const) {
       expect(compileVerificationPlan({ ...input, risk })).toEqual(fallback())
     }
   })
