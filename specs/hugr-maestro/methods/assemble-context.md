@@ -101,11 +101,12 @@ freeze, not foundation source evidence.
     change changes ScopeProposal evidence and requires `resolve-scope` plus `revise-plan`. It holds if stored
     mode/boundaries/anchors no longer validate, or if requested scope changes; those require `resolve-scope` plus
     `revise-plan` as appropriate.
-   On changed current evidence, invoke `execution-eligibility-projection-write` atomically for old
-   ApprovalDecision/current-evidence before context persistence; writer failure is `HOLD` with no child creation. It
-   never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
-4. Persist immutable linked `ContextRecord` bound to same revision hash and historical ScopeProposal. `validate-plan`
-   receives record identity only.
+    On changed current evidence, run one lifecycle-fenced atomic context-revocation transaction: persist linked
+    immutable `ContextRecord` and replace old eligibility with `SUPERSEDED_FOR_EXECUTION` together. Failure rolls
+    neither forward; recovery resumes same idempotent transaction, never leaves old eligibility/new context split. It
+    never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
+4. Atomic transaction binds `ContextRecord` to same revision hash and historical ScopeProposal. `validate-plan`
+   receives record identity only after both context persistence and eligibility supersession commit.
 
 ## Tools and Guards
 
@@ -118,8 +119,7 @@ freeze, not foundation source evidence.
 | `capability-memory-read`           | read current trusted capability/memory identity             | bounded adapter read           |
 | `repository-inspection-read`       | read current trusted inspection identity                    | bounded adapter read           |
 | `atlas-context-envelope-read`      | frozen adapter over measured current Atlas seam            | Atlas read only                |
-| `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
-| `execution-eligibility-projection-write` | atomically replace existing eligibility with `SUPERSEDED_FOR_EXECUTION` on changed current evidence | atomic with context write |
+| `context-revocation-write`         | lifecycle-fenced atomic linked ContextRecord persistence + `SUPERSEDED_FOR_EXECUTION` replacement | one durable transaction |
 | `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
 | `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
 | `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
@@ -165,7 +165,7 @@ replaces prior plan evidence.
 | Missing/mismatched historical ScopeProposal or its stored inspection-receipt identity/content | `HOLD`; no re-resolution or live scan |
 | Same-mode non-scope SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
 | GROUNDED catalog version change | `HOLD`; resolve-scope + revise-plan required |
-| execution-eligibility-projection-write failure | `HOLD`; no child creation                                  |
+| context-revocation transaction failure | `HOLD`; neither linked ContextRecord nor supersession commits; idempotent recovery resumes transaction |
 | Stored mode/boundaries/anchors no longer validate or requested scope changes | `HOLD`; resolve-scope + revise-plan as appropriate |
 | Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
 | Missing/mismatched resolved path/anchor relation or ambiguous symbol-only anchor | `HOLD`; no context binding                 |
@@ -176,9 +176,10 @@ replaces prior plan evidence.
 1. Canonical `GROUNDED` revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
 2. V1-shaped territory/pack input is refused; current foundation adapter is only reader.
 3. Empty/uncovered result holds, never fabricates context or unseeded state.
-4. Same-mode non-scope SHA/evidence refresh with same valid stored scope/boundaries/anchors requires linked new
-   ContextRecord before validation, not ScopeProposal/revision. GROUNDED catalog version change, changed requested
-   scope, or invalid stored mode/boundary/anchor holds for resolve-scope + revise-plan as appropriate.
+4. Same-mode non-scope SHA/evidence refresh with same valid stored scope/boundaries/anchors requires atomic linked
+   new ContextRecord persistence plus old-eligibility supersession before validation, not ScopeProposal/revision.
+   Failure commits neither and recovery resumes same idempotent transaction. GROUNDED catalog version change, changed
+   requested scope, or invalid stored mode/boundary/anchor holds for resolve-scope + revise-plan as appropriate.
 5. No result of this method can create a child Session or Task.
 6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
    and bounded `InspectionBoundary` scope produces `UNGROUNDED` ContextRecord; that record contains
