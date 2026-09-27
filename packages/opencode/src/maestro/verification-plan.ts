@@ -86,7 +86,7 @@ function validPaths(paths: readonly string[]) {
         path.length > 0 &&
         !path.startsWith("/") &&
         !path.startsWith("\\") &&
-        !/^[a-z]:[\\/]/i.test(path) &&
+        !/^[a-z]:/i.test(path) &&
         !path.split(/[\\/]/).includes(".."),
     )
   )

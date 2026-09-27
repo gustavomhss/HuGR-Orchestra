@@ -122,10 +122,15 @@ describe("compileVerificationPlan", () => {
       { changedPaths: ["same.ts", "same.ts"] },
       { changedPaths: ["/absolute.ts"] },
       { changedPaths: ["C:\\absolute.ts"] },
+      { changedPaths: ["d:relative.ts"] },
       { changedPaths: ["packages/../escape.ts"] },
     ]) {
       expect(compileVerificationPlan({ ...input, ...changes })).toEqual(fallback({ ...changes }))
     }
+  })
+
+  test("rejects case-insensitive drive prefixes before docs risk reduction", () => {
+    expect(compileVerificationPlan({ ...input, changedPaths: ["d:relative.md"], risk: "docs" })).toEqual(fallback())
   })
 })
 
