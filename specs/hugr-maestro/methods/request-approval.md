@@ -123,9 +123,10 @@ ContextRecord, current-evidence identity/hash, and policy revision/hash. It is p
 Task. Task admission is one authoritative serialized transaction under same currentness/revision/policy-generation
 fence: live-read evidence; verify exact current eligibility; first atomically persist `RESERVED` admission row with
 idempotency key, deterministic child ID, decision/validation/context/evidence/policy hashes; create or resume only
-bound child; atomically mark row `CREATED`. Post-create receipt failure leaves `RESERVED`/creating recovery; retry
-resumes only reserved child, never creates another. Supersession/revision change either wins before reservation and
-denies/no child, or follows winning reservation/receipt and cannot authorize another child. Never check then
+bound child; atomically mark row `CREATED`. `RESERVED`/creating recovery re-enters serialized eligibility fence:
+any stale policy, context, revision, evidence, or projection is `HOLD` and cancels reservation, never resumes child.
+Only current reservation resumes bound child, never creates another. Supersession/revision change either wins before
+reservation and denies/no child, or follows winning reservation/receipt and cannot authorize another child. Never check then
 separately `sessions.create`. No PlanRevision or PlanValidationRecord table is introduced until those methods have a
 real runtime consumer.
 
@@ -145,7 +146,8 @@ message against different presentation/revision holds with visible mismatch reas
 | Supersession/revision change before Task admission                                               | deny; no child                                                                  |
 | Supersession/revision change after Task admission receipt                                        | supersede eligibility; cannot authorize another child                           |
 | Policy revision/hash change                                                                      | atomically supersede eligibility; deny Task admission                           |
-| Post-create `CREATED` receipt failure                                                            | retain `RESERVED`/creating recovery; retry resumes bound child, never another  |
+| `RESERVED`/creating recovery with stale policy/context/revision/evidence/projection             | `HOLD`; cancel reservation; never resume child                                  |
+| Post-create `CREATED` receipt failure with current fence                                         | retain `RESERVED`/creating recovery; retry resumes bound child, never another  |
 | Pre-create Task-admission transaction failure                                                    | `HOLD`; no reservation or child                                                 |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
@@ -186,9 +188,11 @@ message against different presentation/revision holds with visible mismatch reas
    atomically supersedes eligibility; Task admission compares exact policy revision/hash; all writers serialize.
    Task admission first atomically persists `RESERVED` row with idempotency key, deterministic child ID, and
    decision/validation/context/evidence/policy hashes; then creates or resumes bound child and atomically marks
-   `CREATED`. Post-create receipt failure retains `RESERVED`/creating recovery; retry resumes only reserved child,
-   never another. Supersession/revision change either denies before reservation or follows winning reservation/receipt
-   and cannot authorize another child. Freshness change supersedes old eligibility; revalidation cannot reactivate it.
+   `CREATED`. `RESERVED`/creating recovery re-enters serialized eligibility fence: stale policy, context, revision,
+   evidence, or projection holds and cancels reservation, never resumes child. Current recovery resumes only reserved
+   child, never another. Supersession/revision change either denies before reservation or follows winning
+   reservation/receipt and cannot authorize another child. Freshness change supersedes old eligibility; revalidation
+   cannot reactivate it.
 
 ## Anti-Overengineering Boundary
 

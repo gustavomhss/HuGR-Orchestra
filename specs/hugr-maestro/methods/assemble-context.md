@@ -97,8 +97,10 @@ freeze, not foundation source evidence.
 3. `context-envelope-guard` reads current trusted capability-memory and repository-inspection evidence. It preserves
    historical ScopeProposal identity and revalidates its stored mode, boundaries, direct-user anchors, and resolved
    paths against current evidence. It does not require current evidence identity/hash/SHA to equal historical scope
-   evidence: valid SHA-only evidence change creates linked ContextRecord. It holds if stored mode/boundaries/anchors
-   no longer validate, or if requested scope changes; those require `resolve-scope` plus `revise-plan` as appropriate.
+    evidence: only same-mode non-scope evidence change creates linked ContextRecord. `GROUNDED` catalog version
+    change changes ScopeProposal evidence and requires `resolve-scope` plus `revise-plan`. It holds if stored
+    mode/boundaries/anchors no longer validate, or if requested scope changes; those require `resolve-scope` plus
+    `revise-plan` as appropriate.
    On changed current evidence, invoke `execution-eligibility-projection-write` atomically for old
    ApprovalDecision/current-evidence before context persistence; writer failure is `HOLD` with no child creation. It
    never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
@@ -161,7 +163,8 @@ replaces prior plan evidence.
 | UNGROUNDED without complete capability/memory receipt and inspection SHA | `HOLD`; no context binding                         |
 | Empty, glob, directory, repository-wide, or SHA-unbound InspectionBoundary | `HOLD`; no broad fallback                      |
 | Missing/mismatched historical ScopeProposal or its stored inspection-receipt identity/content | `HOLD`; no re-resolution or live scan |
-| SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
+| Same-mode non-scope SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
+| GROUNDED catalog version change | `HOLD`; resolve-scope + revise-plan required |
 | execution-eligibility-projection-write failure | `HOLD`; no child creation                                  |
 | Stored mode/boundaries/anchors no longer validate or requested scope changes | `HOLD`; resolve-scope + revise-plan as appropriate |
 | Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
@@ -173,9 +176,9 @@ replaces prior plan evidence.
 1. Canonical `GROUNDED` revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
 2. V1-shaped territory/pack input is refused; current foundation adapter is only reader.
 3. Empty/uncovered result holds, never fabricates context or unseeded state.
-4. SHA/evidence refresh with same valid stored scope/boundaries/anchors requires linked new ContextRecord before
-   validation, not ScopeProposal/revision. Changed requested scope or invalid stored mode/boundary/anchor holds for
-   resolve-scope + revise-plan as appropriate.
+4. Same-mode non-scope SHA/evidence refresh with same valid stored scope/boundaries/anchors requires linked new
+   ContextRecord before validation, not ScopeProposal/revision. GROUNDED catalog version change, changed requested
+   scope, or invalid stored mode/boundary/anchor holds for resolve-scope + revise-plan as appropriate.
 5. No result of this method can create a child Session or Task.
 6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
    and bounded `InspectionBoundary` scope produces `UNGROUNDED` ContextRecord; that record contains

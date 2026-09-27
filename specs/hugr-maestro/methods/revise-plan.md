@@ -23,10 +23,12 @@ HOLD      lineage/context/change evidence invalid; no revision/task
 
 Stakeholder requests an alteration, `validate-plan` returns `INVALID`, or plan owner explicitly requests revision
 of a current proposal/approval that changes plan fields. `resolve-scope` supplies successor scope before this method
-when scope may change. Validation remediation enters this method only when it changes plan fields. A capability,
-inspection, receipt, SHA, or current-evidence freshness change within same mode creates no vN+1: unchanged revision
-re-enters `assemble-context`, then linked validation, presentation, and direct ApprovalDecision. GROUNDED↔UNGROUNDED
-mode change alters ScopeProposal shape/authority evidence and requires `resolve-scope` then `revise-plan`, or
+when scope may change. Validation remediation enters this method only when it changes plan fields. A `GROUNDED`
+catalog version change changes ScopeProposal evidence and requires `resolve-scope` then `revise-plan`. Only same-mode
+non-scope context evidence change (capability, inspection, receipt, SHA, anchor verification, or current-evidence
+freshness) keeps immutable revision and re-enters `assemble-context`, then linked validation, presentation, and direct
+ApprovalDecision. GROUNDED↔UNGROUNDED mode change alters ScopeProposal shape/authority evidence and requires
+`resolve-scope` then `revise-plan`, or
 clarification when scope cannot be honestly resolved.
 
 ## Inputs
@@ -72,8 +74,9 @@ as mode-dependent scope, never canonical territory.
 It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by durable
 `execution-eligibility-projection-write`, not deleted or rewritten. Same-mode freshness change (capability receipt, inspection SHA, anchor verification, or current-evidence
 identity/hash) is not a revision: it supersedes old approval and keeps vN for linked ContextRecord, validation,
-presentation, and direct ApprovalDecision. Mode change requires new ScopeProposal then vN+1. Only plan-field or
-mode/authority shape change creates vN+1.
+presentation, and direct ApprovalDecision. `GROUNDED` catalog version change is scope evidence change: it requires
+`resolve-scope` plus new ScopeProposal then vN+1. Mode change also requires new ScopeProposal then vN+1. Only
+same-mode non-scope context refresh avoids vN+1.
 
 ### 3. Guard and Persist
 
@@ -148,9 +151,10 @@ selects one, never auto-merge.
 6. GROUNDED or UNGROUNDED successor evidence is accepted only under its exact mode rules; successor context assembly
    always precedes validation, no pre-bind Atlas-sourced successor fact is accepted, and ungrounded scope remains
    bounded `InspectionBoundary` entries plus exclusions.
-7. Same-mode receipt, SHA, anchor, or current-evidence freshness change does not create vN+1; it supersedes old
-   approval and rebinds context, validation, presentation, and direct approval on existing immutable revision.
-   GROUNDED↔UNGROUNDED mode change requires resolve-scope then revise-plan, or clarification.
+7. Same-mode non-scope receipt, SHA, anchor, or current-evidence freshness change does not create vN+1; it
+   supersedes old approval and rebinds context, validation, presentation, and direct approval on existing immutable
+   revision. GROUNDED catalog version change and GROUNDED↔UNGROUNDED mode change require resolve-scope then
+   revise-plan, or clarification.
 
 ## Anti-Overengineering Boundary
 
