@@ -457,9 +457,9 @@ file makes WPs sequential unless the lead creates one explicit integration WP.
 
 | WP        | Owner                             | Status  | Reason                                                                  |
 | --------- | --------------------------------- | ------- | ----------------------------------------------------------------------- |
-| #184 M0.1 | lead                              | review  | contract source and evidence commit/PR pending                          |
-| #187 M0.2 | Jimmy-style read-only research    | review  | evidence record accepted; commit/PR pending                             |
-| #183 M0.3 | Charlie-style pure parser         | blocked | wait for M0.1/M0.2 commit plus bootstrap packet                         |
+| #184 M0.1 | lead                              | delivered | contract source and evidence receipt delivered                        |
+| #187 M0.2 | Jimmy-style read-only research    | delivered | baseline evidence receipt delivered                                   |
+| #183 M0.3 | Charlie-style pure parser         | delivered | pure validator delivered; no runtime wiring                           |
 | #181 M1.1 | Charlie-style focused test        | blocked | needs current baseline evidence from #187                               |
 | #182 M1.2 | Charlie-style pure model          | blocked | needs exact Relay contract from #184                                    |
 | #185 M2.1 | Charlie-style schema/fold         | blocked | needs lifecycle transition table from #184                              |
@@ -467,7 +467,7 @@ file makes WPs sequential unless the lead creates one explicit integration WP.
 | #191 M5.1 | Charlie-style pure planner        | blocked | needs risk/verification contract from #184                              |
 | #198 M6.1 | Charlie-style pure registry       | blocked | needs ability boundary from #184                                        |
 | #200 M7.1 | Charlie-style pure provider       | blocked | needs Atlas mode contract from #184                                     |
-| #206 M0.4 | lead                              | blocked | normalizes legacy items and freezes conflict map after #184, #187, #183 |
+| #206 M0.4 | lead                              | running | conflict map and legacy normalization in progress                       |
 
 No implementation agent is dispatched until its row changes from `blocked` to
 `ready` through a lead-owned contract update.

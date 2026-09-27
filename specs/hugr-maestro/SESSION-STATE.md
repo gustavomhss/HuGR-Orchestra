@@ -1,6 +1,8 @@
 # Maestro V2 Session State
 
-Snapshot: 2026-09-25. Baseline: `fork/dev` at `102e763599` (`chore: generate`).
+Snapshot: 2026-09-27. Current `fork/dev` baseline:
+`b8f9b03c8550445c48cb204c962f595f5d2a99de` (`chore: generate`). Historical
+`102e763599` baseline remains evidence only.
 
 This is the short operational snapshot. Read [ROADMAP.md](ROADMAP.md) for dependency order, work in progress, and cleanup rules. GitHub issues remain the acceptance-contract source of truth.
 
@@ -15,15 +17,19 @@ This is the short operational snapshot. Read [ROADMAP.md](ROADMAP.md) for depend
 | Atlas territory catalog      | Internal Atlas implementation only | `foundation/atlas` has `territoryCatalog(projectId)`. No installed host boundary exists. See #112.                                       |
 | Static Own                   | Snapshot and guard exist           | Canonical host consumption boundary is not implemented. See #109.                                                                        |
 | Context adapter              | Not implemented                    | AtlasContextEnvelope and ContextToolPlan remain contract-only. See #108.                                                                 |
+| M0.3 validator               | Delivered pure validator only       | #183 validates legacy bodies; it has no runtime wiring, GitHub mutation, or readiness writer.                                               |
+| M0.4 conflict map            | Active/HOLD queue                   | #206 freezes legacy normalization and conflict facts before any implementation WP can become `READY`.                                       |
 
 ## Recent Delivery
 
 - PR #124 made GitHub App credentials optional. Fork workflows use `GITHUB_TOKEN`; malformed partial App configuration fails closed.
 - PR #125 fixed malformed Atlas HTML, restored `generate`, and limits final `publish` to upstream `anomalyco/opencode`.
-- Generated successor baseline is `102e763599`; no workflow URL is recorded here.
+- Historical 2026-09-25 generated successor baseline was `102e763599`; no current-base workflow URL is recorded here.
 - Fork `publish` is intentionally skipped.
 - Windows Core instability remains tracked in #102. A successful rerun is not root-cause evidence; require a reproducer and focused regression gate before claiming Windows stability.
-- GitHub Actions evidence must name its SHA. `102e763599` is generated successor baseline; do not inherit matrix evidence from parent `688d264010`.
+- GitHub Actions evidence must name its SHA. Do not inherit matrix evidence from historical `688d264010` or `102e763599`.
+- #206 runs from `b8f9b03c8550445c48cb204c962f595f5d2a99de`; its map retains
+  #107 and #113 for coordination and holds every implementation WP.
 
 ## Active Blockers
 
@@ -48,13 +54,10 @@ This is the short operational snapshot. Read [ROADMAP.md](ROADMAP.md) for depend
 
 ## Next Execution
 
-1. Triage #107 and the Windows Core failure #102 with current-run evidence.
-2. Classify and close applicable #113 P2 safety children before #111.
-3. Deliver #112 as an installed, read-only, versioned boundary. Do not recreate Atlas catalog logic in OpenCode.
-4. Deliver #114 durable record boundaries; missing context must HOLD.
-5. Deliver #109, then #108 to persist verified ContextRecord evidence.
-6. Deliver #106 and #110 from current `dev`.
-7. Run #111 only as fresh current-base integration gate after applicable dependencies close.
+1. Normalize and validate retained legacy bodies through delivered M0.3.
+2. Freeze #107 disposition and #102 Windows lifecycle root evidence.
+3. Freeze #112 installed boundary, #114 durable records, #109 Own boundary, then #108 context.
+4. Freeze #106/#110 shared seams; run #111 only as fresh current-base integration gate.
 
 ## Update Rule
 

@@ -1,6 +1,8 @@
 # Maestro V2 Delivery Roadmap
 
-Snapshot: 2026-09-25. Planning baseline: `fork/dev` at `102e763599`.
+Snapshot: 2026-09-27. Current planning baseline: `fork/dev` at
+`b8f9b03c8550445c48cb204c962f595f5d2a99de`. Historical 2026-09-25 baseline
+`102e763599` remains historical evidence only.
 
 ## Purpose
 
@@ -28,6 +30,42 @@ This file consolidates Maestro/Atlas delivery state, related CI, relevant PRs, a
 | GitHub App fallback                         | Yes                   | Fork uses workflow token; App remains supported when fully configured.                 |
 | Generate workflow                           | Yes                   | Generated successor baseline is `102e763599`; no workflow URL is recorded here.        |
 | Fork publish workflow                       | Intentionally skipped | Release remains upstream-only.                                                         |
+| M0.1 / #184 program contract                | Yes                   | Contract receipt only; no implementation readiness claim.                             |
+| M0.2 / #187 baseline evidence               | Yes                   | Evidence is bounded to recorded source and SHA.                                        |
+| M0.3 / #183 work-contract validator         | Yes                   | Pure validator only; no runtime wiring, GitHub mutation, or readiness writer.         |
+
+## M0.4 Conflict Map Receipt
+
+M0.4 / #206 is running on base
+`b8f9b03c8550445c48cb204c962f595f5d2a99de`. This is a planning receipt,
+not product dispatch. `UNFROZEN` is deliberate: no owner, interface, check,
+or dependency is inferred beyond recorded inventory. Every implementation WP
+remains `HOLD`; #107 and #113 are retained coordination only.
+
+| wpId | disposition | baseSha | ownerFiles | sharedFiles/integrationOwner | interfaceAnchor | dependencyIds | pairwiseVerdict | requiredChecks | mergeOrder | validatorReceipt | coldReview |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #106 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN; approval/read seam shared with #114 | `packages/opencode/src/tool/registry.ts`; `packages/opencode/src/tool/task.ts` / UNFROZEN | UNFROZEN | #114, #108 | HOLD: shared #106/#114 approval/read seam | UNFROZEN | 6 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #107 | RETAINED COORDINATION | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | UNFROZEN / lead | UNFROZEN | UNFROZEN | HOLD: coordination only; no implementation WP | UNFROZEN | 2 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #108 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | UNFROZEN / UNFROZEN | UNFROZEN | #112, #114, #109 | HOLD: interface and ownership unresolved | UNFROZEN | 5 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #109 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `foundation/atlas/packages/index/src/index.ts`; `.github/workflows/test.yml`; unnamed OpenCode host adapter / UNFROZEN | UNFROZEN | #107 | HOLD: interface and host boundary unresolved | UNFROZEN | 4 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #110 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN; admission seam shared with #62 | `packages/opencode/src/tool/registry.ts`; `packages/opencode/src/session/prompt.ts`; `packages/opencode/src/tool/task.ts` / UNFROZEN | UNFROZEN | #62 | HOLD: shared #62/#110 admission seam | UNFROZEN | 6 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #111 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | `packages/opencode/src/maestro/governed-task.ts`; `packages/opencode/src/maestro/task-hash.ts`; `packages/opencode/src/tool/task.ts` | `packages/opencode/src/session/prompt.ts`; `packages/opencode/src/tool/registry.ts` / UNFROZEN | UNFROZEN | #102, #107, #112, #114, #109, #108, #106, #110, #113 | HOLD: all predecessors unresolved | UNFROZEN | 7 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #112 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | `foundation/atlas/packages/index/src/territory-catalog.ts` | `foundation/atlas/packages/index/src/index.ts`; `foundation/atlas/packages/index/package.json`; `.github/workflows/test.yml` / UNFROZEN | UNFROZEN | UNFROZEN | HOLD: installed boundary UNFROZEN | UNFROZEN | 3 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #113 | RETAINED COORDINATION | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `packages/opencode/src/tool/task.ts` task cluster / UNFROZEN | UNFROZEN | #25, #42, #49, #62, #72, #86 | HOLD: coordination only; child seams unresolved | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #114 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN; approval/read seam shared with #106 | `packages/opencode/src/tool/registry.ts`; `packages/opencode/src/tool/task.ts` / UNFROZEN | UNFROZEN | #112 | HOLD: durable-record and shared approval/read seam unresolved | UNFROZEN | 4 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #25 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | UNFROZEN / UNFROZEN | UNFROZEN | #113 | HOLD: #113 child unresolved | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #42 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `packages/opencode/src/tool/task.ts` task cluster / UNFROZEN | UNFROZEN | #113 | HOLD: shared task cluster | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #49 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `packages/opencode/src/tool/task.ts` task cluster / UNFROZEN | UNFROZEN | #113 | HOLD: shared task cluster | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #62 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN; admission seam shared with #110 | `packages/opencode/src/tool/registry.ts`; `packages/opencode/src/session/prompt.ts`; `packages/opencode/src/tool/task.ts` / UNFROZEN | UNFROZEN | #113 | HOLD: shared #62/#110 admission seam | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #72 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `packages/opencode/src/tool/task.ts` task cluster / UNFROZEN | UNFROZEN | #113 | HOLD: shared task cluster | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #86 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `packages/opencode/src/tool/task.ts` task cluster / UNFROZEN | UNFROZEN | #113 | HOLD: shared task cluster | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #94 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | UNFROZEN / UNFROZEN | UNFROZEN | UNFROZEN | HOLD: Atlas tracker | UNFROZEN | 1 | M0.3 delivered; legacy body normalization pending | PENDING |
+| #102 | HOLD | `b8f9b03c8550445c48cb204c962f595f5d2a99de` | UNFROZEN | `.github/workflows/test.yml` / lead | UNFROZEN | UNFROZEN | HOLD: Windows lifecycle root evidence UNFROZEN | UNFROZEN | 2 | M0.3 delivered; legacy body normalization pending | PENDING |
+
+M0.4 execution order: normalize and validate legacy bodies; freeze #107
+disposition and #102 root evidence; freeze #112 installed boundary; #114
+durable records; #109 Own boundary; #108 context; #106 and #110; then #111
+gate. No product dispatch follows from this map.
 
 ## Delivery DAG
 
@@ -51,16 +89,14 @@ CI root cause (#102) ------------> reliable current-base evidence
 
 | Order | Issue   | State                     | Entry condition                                                                                                                                                                                          | Exit condition                                                                                  |
 | ----- | ------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 0     | #102    | Current CI defect         | Current Windows failure evidence                                                                                                                                                                         | Root cause and focused regression gate; no global timeout or serialization workaround.          |
-| 1     | #107    | Foundation tracker        | Reconcile original Atlas/Own findings                                                                                                                                                                    | Every child has category, dependency, owner, and release disposition.                           |
-| 2     | #112    | Partial implementation    | Freeze installed read API                                                                                                                                                                                | OpenCode reads versioned canonical Territory objects without vendor-relative imports.           |
-| 3     | #114    | Not implemented           | #112 available                                                                                                                                                                                           | PlanRevision, ContextRecord, and validation records persist/read; absent context produces HOLD. |
-| 4     | #109    | Not implemented           | Relevant Own findings resolved or explicitly gated                                                                                                                                                       | Host verifies canonical Own bytes, identity, receipt, freshness, and coverage before injection. |
-| 5     | #108    | Not implemented           | #112, #114, and #109 available                                                                                                                                                                           | Deterministic ContextToolPlan persists verified ContextRecord or returns HOLD.                  |
-| 6     | #106    | Not implemented           | #114 and #108 available                                                                                                                                                                                  | Approval presenter reads exact durable records and remains fail-closed on mismatch.             |
-| 7     | #110    | Partial branch exists     | Rebase from current `dev`; close #62 hardening in same evidence set                                                                                                                                      | Persisted direct stakeholder messages create exactly one admission before model work.           |
-| 8     | #113 P2 | Open safety hardening     | Current contracts and defect evidence reconciled                                                                                                                                                         | #25, #42, #49, #62, #72, and #86 are closed or explicitly non-applicable to governed flow.      |
-| 9     | #111    | Current-base gate pending | #102 root cause closed, #107 ledger complete, #112, #114, #109, #108, #106, #110, all applicable #113 P1/P2 children, current CI, and independent contract/implementation/mutation-probe review complete | Current-base integration evidence, no historical PR #11 assumption, human merge decision.       |
+| 0     | legacy bodies | M0.4 active/HOLD | Validate each retained legacy body through delivered M0.3 pure validator | No retained item becomes `READY` without validator receipt. |
+| 1     | #107 / #102 | HOLD | Freeze #107 disposition and #102 root evidence | Coordination disposition and focused Windows root-cause evidence are frozen. |
+| 2     | #112 | HOLD | Freeze installed read boundary | No interface is inferred from internal Atlas implementation. |
+| 3     | #114 | HOLD | #112 boundary frozen | Durable-record interface is frozen. |
+| 4     | #109 | HOLD | #107 disposition and #114 records frozen | Own host boundary is frozen. |
+| 5     | #108 | HOLD | #112, #114, and #109 boundaries frozen | Context interface and ownership are frozen. |
+| 6     | #106 / #110 | HOLD | #114 / #108 and #62 seams frozen | Approval/read and admission shared seams are sequenced. |
+| 7     | #111 | HOLD | All applicable predecessors and current-base evidence frozen | Fresh current-base integration-gate evidence. |
 
 ## Work In Progress And PR Triage
 
@@ -98,11 +134,11 @@ No worktree is removed, reset, or force-updated by this roadmap. Cleanup require
 
 | Workflow    | Fork policy                                 | Current condition                                                                                                                                            |
 | ----------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `generate`  | Must run and may commit generated output    | Generated successor is `102e763599`; record its workflow URL before claiming matrix health.                                                                  |
+| `generate`  | Must run and may commit generated output    | Historical 2026-09-25 successor was `102e763599`; record current-base workflow URL before claiming matrix health.                                             |
 | `publish`   | Must skip                                   | Fork policy is upstream-only release; record workflow URL when used as evidence.                                                                             |
-| `typecheck` | Must pass                                   | No `102e763599` run citation recorded in this snapshot.                                                                                                      |
-| `test`      | Must pass on Linux and Windows              | `688d264010` test run passed: [36169196802](https://github.com/gmhelmold/HuGR-Orchestra/actions/runs/36169196802). No successor evidence; #102 remains open. |
-| `nix-eval`  | Must complete its defined evaluation policy | No `102e763599` run citation recorded in this snapshot.                                                                                                      |
+| `typecheck` | Must pass                                   | No current-base run citation recorded; historical `102e763599` evidence does not transfer.                                                                   |
+| `test`      | Must pass on Linux and Windows              | Historical `688d264010` run passed: [36169196802](https://github.com/gmhelmold/HuGR-Orchestra/actions/runs/36169196802). No current-base evidence; #102 remains open. |
+| `nix-eval`  | Must complete its defined evaluation policy | No current-base run citation recorded; historical `102e763599` evidence does not transfer.                                                                   |
 
 Rules:
 
