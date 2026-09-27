@@ -40,7 +40,8 @@ substitute for scope-bound plan context.
 1. `PlanIntent` and `ScopeProposal` are committed, linked, and have explicit session-orientation reference or
    `UN-SEEDED` state.
 2. Scope proposal is `GROUNDED` with current verified catalog/version/project evidence or `UNGROUNDED` with exact
-   ABSENT/BOOTSTRAP capability/memory receipt plus current inspection SHA; its scope is non-empty.
+   ABSENT/BOOTSTRAP capability/memory receipt plus current inspection SHA and non-empty explicit
+   `InspectionBoundary` list plus exclusions; its mode-dependent scope is non-empty.
 3. Plan intent has no existing revision; any later change enters `revise-plan`.
 
 Precondition failure yields `HOLD`; it does not reconstruct a missing plan from conversation text.
@@ -61,7 +62,7 @@ For sufficient input, build immutable `PlanRevision` with field-level provenance
 revision identity      initial revision number v1; no prior revision link
 goal                   desired outcome
 acceptance             observable completion conditions
-scope                  affected territory and explicit exclusions
+scope                  GROUNDED typed territory identifiers or UNGROUNDED InspectionBoundary list; explicit exclusions
 constraints            business, technical, safety, and operational limits
 review requirement     independent evaluation required before delivery
 context requirement    ScopeProposal identity + `PENDING` binding state for assemble-context
@@ -73,7 +74,8 @@ status                 PROPOSED only
 
 `PENDING` context binding permits no field to claim `atlas:<address>`, Atlas ownership, or Atlas fact, regardless of
 ScopeProposal mode. `maestro` fields remain visible to stakeholder and cannot become implied authority. Scope comes
-only from immutable ScopeProposal; draft cannot alter, widen, or recreate it. `UN-SEEDED` remains orientation only.
+only from immutable ScopeProposal; draft cannot alter, widen, recreate, or treat InspectionBoundary as territory.
+`UN-SEEDED` remains orientation only.
 
 ### 3. Persist Draft
 
@@ -142,6 +144,7 @@ Any stakeholder answer or changed context after v1 enters `revise-plan`; v1 rema
    labels, `PENDING` context binding, visible Maestro assumptions, and no Task.
 2. A `GROUNDED` or `UNGROUNDED` ScopeProposal yields `PROPOSED` only when every project-specific claim is a visible
    Maestro proposal; no field claims Atlas address, ownership, or fact before a `GROUNDED` ContextRecord binds.
+   `UNGROUNDED` preserves its bounded `InspectionBoundary` list and exclusions as `PENDING` scope, never territory.
 3. Missing desired outcome or decision that changes incompatible product results yields one `CLARIFY` need,
    not a made-up acceptance/scope field.
 4. A fabricated Atlas address, missing source label, hidden assumption, or non-`PROPOSED` status is rejected

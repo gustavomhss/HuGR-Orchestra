@@ -31,7 +31,7 @@ bound result became stale. `UN-SEEDED` provider declaration is orientation-only 
 
 ```text
 planRevisionId       immutable proposed revision identity + content hash
-canonicalScope        typed territory identifiers and explicit exclusions from revision
+canonicalScope        GROUNDED typed territory identifiers or UNGROUNDED InspectionBoundary list; explicit exclusions
 scopeMode             `GROUNDED` or `UNGROUNDED` from immutable ScopeProposal
 capabilityReceipt     exact current Atlas capability/memory receipt
 inspectionSha         exact current repository inspection SHA; required for UNGROUNDED
@@ -48,7 +48,8 @@ An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory for
 1. Revision is committed, immutable, `PROPOSED`, and has canonical non-empty scope.
 2. `GROUNDED` scope identifiers resolve through current Atlas territory identity seam and current adapter/version is
    ratified and test-measured.
-3. `UNGROUNDED` scope has exact `ABSENT` or `BOOTSTRAP` capability/memory receipt and current inspection SHA.
+3. `UNGROUNDED` scope has exact `ABSENT` or `BOOTSTRAP` capability/memory receipt, current inspection SHA, and
+   non-empty explicit `InspectionBoundary` list whose entries bind that SHA; it is not treated as territory.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
 treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
@@ -83,12 +84,12 @@ freeze, not foundation source evidence.
 
 ## Procedure After Seam Freeze
 
-1. `context-request-schema-guard` validates exact revision hash, canonical scope, mode, and required evidence.
+1. `context-request-schema-guard` validates exact revision hash, mode-dependent canonical scope, and required evidence.
 2. For `GROUNDED`, read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current
    Atlas proves. For `UNGROUNDED`, bind no Atlas envelope or source.
-3. `context-envelope-guard` checks grounded envelope version, scope identity, snapshot/address, freshness,
+3. `context-envelope-guard` checks grounded envelope version, territory identity, snapshot/address, freshness,
    truncation receipt, and configured budget evidence; or checks ungrounded ABSENT/BOOTSTRAP capability/memory
-   receipt plus inspection SHA. It does not recreate V1 pack protocol.
+   receipt plus inspection SHA and bound `InspectionBoundary` list. It does not recreate V1 pack protocol.
 4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
 
 ## Tools and Guards
@@ -114,7 +115,8 @@ Maestro binds evidence; it cannot choose scope, promote retrieved text into stak
 `ContextRecord` mode is exactly `GROUNDED` or `UNGROUNDED`. It stores revision hash, canonical scope, mode, result,
 timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope address/snapshot, and
 freshness/truncation/budget evidence defined by frozen seam. `UNGROUNDED` stores exact ABSENT/BOOTSTRAP
-capability/memory receipt and current inspection SHA; it contains no Atlas source.
+capability/memory receipt, current inspection SHA, and bound `InspectionBoundary` list plus exclusions; it contains
+no Atlas source.
 
 Deduplication key is `(planRevisionId, scopeMode, evidenceIdentity, methodVersion)`. Grounded `evidenceIdentity` is
 envelope snapshot/version. Ungrounded `evidenceIdentity` is capability/memory receipt plus inspection SHA. Replay
@@ -130,6 +132,7 @@ returns stored record; new evidence creates linked result and never replaces pri
 | Stale, mismatched, provenance-free, or receipt-free envelope | `HOLD`; preserve reason/evidence                         |
 | UN-SEEDED provider declaration without independent ABSENT/BOOTSTRAP evidence | `HOLD`; preserve declaration identity |
 | UNGROUNDED without complete capability/memory receipt and inspection SHA | `HOLD`; no context binding                         |
+| Empty, glob, directory, repository-wide, or SHA-unbound InspectionBoundary | `HOLD`; no broad fallback                      |
 | Duplicate trigger                                            | return stored record                                     |
 
 ## Acceptance After Ratification
@@ -140,7 +143,8 @@ returns stored record; new evidence creates linked result and never replaces pri
 4. Stale context, changed scope, or changed adapter version requires new linked record before validation.
 5. No result of this method can create a child Session or Task.
 6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
-   produces `UNGROUNDED` ContextRecord; that record contains capability/memory receipt, inspection SHA, and no Atlas source.
+   and bounded `InspectionBoundary` scope produces `UNGROUNDED` ContextRecord; that record contains
+   capability/memory receipt, inspection SHA, boundaries/exclusions, and no Atlas source.
 
 ## Anti-Overengineering Boundary
 

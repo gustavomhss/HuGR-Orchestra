@@ -41,7 +41,8 @@ Change record must name what changed or failed. A new unrelated goal is not a re
 
 1. Prior revision and change record resolve and bind same project/session.
 2. Scope proposal resolves, matches same project, has non-empty canonical scope, and has GROUNDED current
-   catalog/version/project evidence or UNGROUNDED ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA.
+   catalog/version/project evidence or UNGROUNDED ABSENT/BOOTSTRAP capability/memory receipt, inspection SHA, and
+   non-empty explicit `InspectionBoundary` list plus exclusions.
 3. Revision reason matches immutable input evidence.
 4. Prior revision's history, including an approval if any, resolves intact.
 
@@ -60,7 +61,8 @@ if no honest vN+1 can be proposed.
 For sufficient input, build vN+1 using same `PlanRevision` schema/provenance rules as `draft-plan`. It carries
 parent revision hash, explicit change reason, field-level diff, ScopeProposal mode/evidence identity, `PENDING` context
 binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta field may claim Atlas-sourced
-successor address, ownership, or fact.
+successor address, ownership, or fact. `UNGROUNDED` successor preserves its `InspectionBoundary` list and exclusions
+as mode-dependent scope, never canonical territory.
 It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by projection, not deleted or
 rewritten; only vN+1 can later seek validation/approval.
 
@@ -131,7 +133,8 @@ selects one, never auto-merge.
    closed.
 5. Same inputs replay same vN+1; later context binding, validation, and exact new approval action are required.
 6. GROUNDED or UNGROUNDED successor evidence is accepted only under its exact mode rules; successor context assembly
-   always precedes validation, and no pre-bind Atlas-sourced successor fact is accepted.
+   always precedes validation, no pre-bind Atlas-sourced successor fact is accepted, and ungrounded scope remains
+   bounded `InspectionBoundary` entries plus exclusions.
 
 ## Anti-Overengineering Boundary
 

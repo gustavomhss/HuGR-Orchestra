@@ -143,6 +143,9 @@ message against different presentation/revision holds with visible mismatch reas
    or changed-plan discussion cannot produce `APPROVED`.
 5. User decline/cancel records `DECLINED` visibly and creates no governed work.
 6. Same user reply replays same decision; one reply bound to another presentation/revision holds.
+7. An ABSENT/BOOTSTRAP capability/memory receipt and inspection SHA with bounded `InspectionBoundary` scope proceeds
+   only through `UNGROUNDED` ScopeProposal, `PENDING` PlanRevision, `UNGROUNDED` ContextRecord, and exact `VALID`
+   validation before this approval; invalid or unbounded boundary holds earlier.
 
 ## Anti-Overengineering Boundary
 
