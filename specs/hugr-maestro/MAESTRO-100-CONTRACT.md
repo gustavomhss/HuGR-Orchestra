@@ -388,7 +388,7 @@ may guide behavior or test cases; it is never a V2 runtime dependency.
 
 ## Internal Abilities
 
-Start with built-in abilities, not an external marketplace:
+Use built-in abilities only:
 
 ```text
 repository, github, tests, ci, relay, atlas
@@ -398,9 +398,7 @@ An ability declares only `id`, summary, required configuration, allowed seats,
 and tools. The core derives availability from real configuration and health.
 An ability proposes operations through the core; only core adapters execute
 repository, GitHub, CI, Task, or Atlas effects. CLI and MCP expose the same
-small filtered inventory. Do not build a graph database, custom web navigator,
-third-party sandbox, or plugin marketplace until multiple built-in abilities
-prove a common missing seam.
+small filtered inventory.
 
 ## Program Trace
 
