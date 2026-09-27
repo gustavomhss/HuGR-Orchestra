@@ -104,7 +104,7 @@ execution.
 | `approval-eligibility-write`       | authoritative serialized compare-and-write: re-read evidence, then atomically persist ApprovalDecision + `ELIGIBLE_FOR_EXECUTION` only on exact validated ContextRecord match | before any governed Task |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | before `sessions.create`, live-read authoritative current evidence; require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and matching projection/context/validation hashes; difference/missing/superseded denies child, invokes/awaits currentness supersession | Session/Task boundary |
+| `no-governed-task-before-approval` | one authoritative serialized Task-admission transaction under currentness/revision fence: live-read evidence; verify exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, immutable revision, current `VALID` validation, ContextRecord, and evidence hash; reserve/bind deterministic child identity; create or resume bound child; persist admission receipt with those hashes | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
@@ -119,10 +119,13 @@ and records it. Maestro/member/model/tool output cannot approve itself or infer 
 `ApprovalPresentation` is durable assistant Session message evidence. After valid direct approve,
 `approval-eligibility-write` atomically appends immutable `ApprovalDecision` and frozen
 `ELIGIBLE_FOR_EXECUTION` projection, storing ordered presentation/user message IDs, exact revision/validation hashes,
-ContextRecord, and current-evidence identity/hash. It is prerequisite to every later governed Task; before
-`sessions.create`, Task fence live-reads authoritative current evidence and compares it to projection/context/
-validation hashes. Difference denies child creation and awaits currentness supersession. No PlanRevision or
-PlanValidationRecord table is introduced until those methods have a real runtime consumer.
+ContextRecord, and current-evidence identity/hash. It is prerequisite to every later governed Task. Task admission is
+one authoritative serialized transaction under same currentness/revision fence: live-read evidence, verify exact
+current eligibility, reserve/bind deterministic child identity, create or resume only that child, then persist
+admission receipt with decision/validation/context/evidence hashes. Supersession/revision change either wins before
+admission and denies/no child, or follows winning admission receipt and cannot authorize another child. Never check
+then separately `sessions.create`. No PlanRevision or PlanValidationRecord table is introduced until those methods
+have a real runtime consumer.
 
 Presentation deduplication key is `(planRevisionId, validationRecordId, sessionId, methodVersion)`. Decision
 deduplication key is `(approvalMessageId, methodVersion)`. Same reply returns stored decision. Reusing one reply
@@ -137,7 +140,9 @@ message against different presentation/revision holds with visible mismatch reas
 | Validation/approval current-evidence mismatch                                                  | `HOLD`; named mismatch rejection before child creation                            |
 | Compare-and-write re-read changed/unavailable evidence                                         | `HOLD`; neither ApprovalDecision nor eligibility write                           |
 | Eligible-projection write failure                                                                | `HOLD`; no Task/child Session                                                     |
-| Task live-read difference/missing/superseded eligibility                                        | deny before `sessions.create`; invoke/await currentness supersession; no child   |
+| Supersession/revision change before Task admission                                               | deny; no child                                                                  |
+| Supersession/revision change after Task admission receipt                                        | supersede eligibility; cannot authorize another child                           |
+| Task-admission transaction failure                                                               | `HOLD`; no child or admission receipt                                           |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
@@ -173,10 +178,11 @@ message against different presentation/revision holds with visible mismatch reas
    revision; mode change requires resolve-scope then revise-plan. Unavailable verification holds.
 9. `approval-eligibility-write` re-reads current evidence identity/hash in authoritative serialized transaction and
    writes decision plus exact current `ELIGIBLE_FOR_EXECUTION` only on validated ContextRecord match; changed or
-   unavailable evidence holds with neither write. Before `sessions.create`, Task/child Session fence live-reads
-   authoritative evidence, compares projection/context/validation hashes, then denies difference, missing, or
-   superseded eligibility and awaits currentness supersession. Freshness change supersedes old eligibility;
-   revalidation cannot reactivate it.
+   unavailable evidence holds with neither write. Task admission uses one authoritative serialized transaction under
+   same currentness/revision fence: live-read evidence; verify eligibility; reserve/bind deterministic child identity;
+   create or resume bound child; persist admission receipt with decision/validation/context/evidence hashes.
+   Supersession/revision change either denies before admission or follows winning receipt and cannot authorize another
+   child. Freshness change supersedes old eligibility; revalidation cannot reactivate it.
 
 ## Anti-Overengineering Boundary
 

@@ -182,11 +182,12 @@ Close      merge verification -> provenance -> memory -> outcome
 
 `approval-eligibility-write` is one authoritative serialized transaction: re-read current evidence identity/hash,
 then persist durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` only when it equals validated ContextRecord
-evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Task/child Session fence,
-before `sessions.create`, live-reads authoritative current evidence and compares it to projection, ContextRecord, and
-validation hashes. Missing, `SUPERSEDED_FOR_EXECUTION`, or differing evidence denies child creation and invokes/awaits
-currentness supersession; stale dispatch cannot proceed. Currentness/revision transitions atomically supersede
-eligibility.
+evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Task/child Session fence
+is one authoritative serialized Task-admission transaction under same currentness/revision fence: live-read evidence;
+verify current `ELIGIBLE_FOR_EXECUTION`; reserve/bind deterministic child identity; create or resume bound child; then
+persist admission receipt with decision, validation, ContextRecord, and evidence hashes. Supersession/revision change
+serializes against admission: it either supersedes before admission and denies/no child, or admission receipt wins and
+later supersession cannot retroactively authorize another child. Never check then separately `sessions.create`.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and
