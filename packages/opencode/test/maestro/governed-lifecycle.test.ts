@@ -14,7 +14,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
 import type { SessionPrompt } from "../../src/session/prompt"
-import { MessageID, PartID } from "../../src/session/schema"
+import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
@@ -32,6 +32,7 @@ import { presentApprovalFromSession, recordApproval } from "../../src/maestro/ap
 import { renderPresentation } from "../../src/maestro/approval"
 import { taskHash } from "../../src/maestro/task-hash"
 import { and, eq } from "drizzle-orm"
+import { createHash } from "node:crypto"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -487,6 +488,51 @@ describe("Maestro governed lifecycle", () => {
       })
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      const reservedChildID = `ses_maestro_approval_${createHash("sha256")
+        .update([chat.id, "apr_01", governed.taskHash].join("\u0000"))
+        .digest("hex")}`
+      const collision = yield* sessions.create({
+        id: SessionID.make(reservedChildID),
+        parentID: chat.id,
+        title: "Fabricated reserved child",
+        agent: "build",
+      })
+      const collisionExit = yield* Effect.exit(
+        def.execute(
+          {
+            description: "implement dark mode",
+            prompt: "implement dark mode",
+            subagent_type: "general",
+            governed,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            callID: "call_task_exact",
+            agent: "maestro",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(collisionExit)).toBe(true)
+      const database = yield* Database.Service
+      const beforeRetry = yield* database.db
+        .select({ data: EventTable.data })
+        .from(EventTable)
+        .where(
+          and(
+            eq(EventTable.aggregate_id, chat.id),
+            eq(EventTable.type, EventV2.versionedType(MaestroEvent.Approval.ConsumedV2.type, 2)),
+          ),
+        )
+        .all()
+        .pipe(Effect.orDie)
+      expect(beforeRetry).toHaveLength(0)
+      yield* sessions.remove(collision.id)
       yield* def.execute(
         {
           description: "implement dark mode",
@@ -507,7 +553,6 @@ describe("Maestro governed lifecycle", () => {
         },
       )
       expect(yield* sessions.children(chat.id)).toHaveLength(1)
-      const database = yield* Database.Service
       const receipt = yield* database.db
         .select({ data: EventTable.data })
         .from(EventTable)
