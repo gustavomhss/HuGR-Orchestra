@@ -63,28 +63,31 @@ const layer = LayerNode.compile(
 
 const it = testEffect(layer)
 
-function stubOps(): TaskPromptOps {
+function stubOps(options?: { onPrompt?: () => void }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
-      Effect.succeed({
-        info: {
-          id: MessageID.ascending(),
-          role: "assistant",
-          parentID: input.messageID ?? MessageID.ascending(),
-          sessionID: input.sessionID,
-          mode: input.agent ?? "general",
-          agent: input.agent ?? "general",
-          cost: 0,
-          path: { cwd: "/tmp", root: "/tmp" },
-          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-          modelID: input.model?.modelID ?? ref.modelID,
-          providerID: input.model?.providerID ?? ref.providerID,
-          time: { created: Date.now() },
-          finish: "stop",
-        },
-        parts: [],
+      Effect.sync(() => {
+        options?.onPrompt?.()
+        return {
+          info: {
+            id: MessageID.ascending(),
+            role: "assistant",
+            parentID: input.messageID ?? MessageID.ascending(),
+            sessionID: input.sessionID,
+            mode: input.agent ?? "general",
+            agent: input.agent ?? "general",
+            cost: 0,
+            path: { cwd: "/tmp", root: "/tmp" },
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: input.model?.modelID ?? ref.modelID,
+            providerID: input.model?.providerID ?? ref.providerID,
+            time: { created: Date.now() },
+            finish: "stop",
+          },
+          parts: [],
+        }
       }),
   }
 }
@@ -245,13 +248,14 @@ describe("Maestro governed lifecycle", () => {
             taskHash: approval.decision.taskHash,
           },
         }
+        let prompts = 0
         const context = {
           sessionID: chat.id,
           messageID: dispatchMessage.id,
           callID: "call_task_01",
           agent: "maestro",
           abort: new AbortController().signal,
-          extra: { promptOps: stubOps() },
+          extra: { promptOps: stubOps({ onPrompt: () => prompts++ }) },
           messages: [],
           metadata: () => Effect.void,
           ask: () => Effect.void,
@@ -282,6 +286,14 @@ describe("Maestro governed lifecycle", () => {
         })
         const changedCall = yield* Effect.exit(def.execute(input, { ...context, callID: "call_task_changed" }))
         expect(Exit.isFailure(changedCall)).toBe(true)
+        expect(yield* sessions.children(chat.id)).toHaveLength(1)
+        yield* sessions.setPermission({
+          sessionID: first.metadata.sessionId,
+          permission: [{ permission: "read", pattern: "*", action: "allow" }],
+        })
+        const altered = yield* Effect.exit(def.execute(input, context))
+        expect(Exit.isFailure(altered)).toBe(true)
+        expect(prompts).toBe(2)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
       }),
     15_000,

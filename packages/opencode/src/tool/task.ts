@@ -213,9 +213,9 @@ export const TaskTool = Tool.define(
         }
         const expectedTaskHash = taskHash({
           subagentType: params.subagent_type,
-            prompt: params.prompt,
-            model: params.model,
-            ...governed,
+          prompt: params.prompt,
+          model: params.model,
+          ...governed,
         })
         if (governed.taskHash !== expectedTaskHash) {
           return yield* Effect.fail(new Error("Governed Task denied: task-hash-mismatch"))
@@ -489,6 +489,28 @@ export const TaskTool = Tool.define(
           action: "deny" as const,
         })) ?? []),
       ]
+      const childPermissions = [
+        ...childPermission,
+        ...childToolDenies.filter(
+          (deny) =>
+            !childPermission.some(
+              (rule) =>
+                rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
+            ),
+        ),
+      ]
+      if (
+        reserved &&
+        (reserved.permission?.length !== childPermissions.length ||
+          reserved.permission?.some(
+            (rule, index) =>
+              rule.permission !== childPermissions[index]?.permission ||
+              rule.pattern !== childPermissions[index]?.pattern ||
+              rule.action !== childPermissions[index]?.action,
+          ))
+      ) {
+        return yield* Effect.fail(new Error("Governed Task denied: reservation-child-permission-mismatch"))
+      }
       const nextSession =
         session ??
         (yield* sessions
@@ -497,18 +519,7 @@ export const TaskTool = Tool.define(
             parentID: ctx.sessionID,
             title: params.description + ` (@${next.name} subagent)`,
             agent: nextID,
-            permission: [
-              ...childPermission,
-              ...childToolDenies.filter(
-                (deny) =>
-                  !childPermission.some(
-                    (rule) =>
-                      rule.permission === deny.permission &&
-                      rule.pattern === deny.pattern &&
-                      rule.action === deny.action,
-                  ),
-              ),
-            ],
+            permission: childPermissions,
           })
           .pipe(
             Effect.catchCause(() => {
