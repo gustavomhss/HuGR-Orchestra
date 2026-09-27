@@ -27,21 +27,24 @@ Committed `AdmissionRecord` is `READY_TO_DRAFT`, or a plan revision change needs
 
 ```text
 scopeSubject        initial PlanIntent ID | revision parent revision ID + change record ID
-atlasCapability     current Atlas capability receipt: READY | ABSENT | BOOTSTRAP | STALE
+capabilityMemoryRecord trusted `capability-memory-read` canonical record identity + content hash
 territoryCatalog    current verified Atlas territory records and immutable catalog version/address; READY only
-memoryReceipt       exact current capability/memory receipt; ABSENT or BOOTSTRAP only
-inspectionSha       exact current repository inspection SHA; ABSENT or BOOTSTRAP only
+repositoryInspectionRecord trusted `repository-inspection-read` canonical record identity + content hash
 inspectionBoundaries non-empty explicit InspectionBoundary list; ABSENT or BOOTSTRAP only
-inspectionReceipt   immutable receipt keyed by inspectionSha: inspected file paths and discovered symbols per path
-stakeholderMessages durable stakeholder messages named by InspectionBoundary message IDs
+directUserMessages  trusted durable direct-user-message records named by InspectionBoundary message IDs
 projectId           exact project identity from ComposedActor
 target              initial-draft | revision
 methodVersion       version of this contract
 ```
 
-`GROUNDED` uses `READY` capability and current verified catalog/version/project evidence. `UNGROUNDED` is allowed only
-with `ABSENT` or `BOOTSTRAP` capability and exact capability/memory receipt plus current inspection SHA. Unbounded
-paths, globs, V1 territory objects, LLM-invented names, and repository-wide fallback scans are invalid input.
+Raw input cannot assert capability, inspection, or anchor receipt. `capability-memory-read`,
+`repository-inspection-read`, and durable direct-user-message read are trusted bounded adapters. Each emits canonical
+schema plus content hash, producer ID/version, project/session binding where applicable, inspected SHA, actor/anchor
+binding, and adapter-owned grant/boundary. Scope reads these records only; raw, foreign, malformed, altered, or
+ungranted records are `HOLD`. `GROUNDED` uses `READY` capability and current verified catalog/version/project
+evidence. `UNGROUNDED` is allowed only with `ABSENT` or `BOOTSTRAP` capability and exact trusted capability/memory
+record plus trusted inspection record. Unbounded paths, globs, V1 territory objects, LLM-invented names, and
+repository-wide fallback scans are invalid input.
 
 `InspectionBoundary` is non-Atlas scope:
 
@@ -71,8 +74,8 @@ is mode-dependent: `GROUNDED` contains typed canonical Atlas `Territory` identif
 1. Scope subject and `ComposedActor.projectId` resolve and agree.
 2. `GROUNDED` capability is `READY`; catalog/version/project evidence is current, non-empty, versioned, and maps project
    identity without a cross-project fallback.
-3. `UNGROUNDED` capability is exactly `ABSENT` or `BOOTSTRAP`, with exact capability/memory receipt and current
-   inspection SHA; its immutable receipt is keyed by that SHA and its non-empty explicit `InspectionBoundary` list
+3. `UNGROUNDED` trusted capability/memory record is exactly `ABSENT` or `BOOTSTRAP`, and trusted repository
+   inspection record supplies current inspected SHA; its immutable receipt is keyed by that SHA and its non-empty explicit `InspectionBoundary` list
    has exact direct-user message identity/byte-range anchor text matching every candidate path/symbol and receipt
    paths and symbols.
 
@@ -83,8 +86,8 @@ Precondition failure is `HOLD`. Empty grounded catalog is not an empty scope suc
 ### 1. Read Catalog
 
 For `GROUNDED`, read typed canonical territory identifiers, owner, tier, and catalog address/version only. `resolve-scope` does not read
-Pack or `globs`; Atlas owns territory membership semantics. For `UNGROUNDED`, read only capability/memory receipt
-inspection SHA, and immutable same-SHA inspection receipt; derive only explicit receipt-verified
+Pack or `globs`; Atlas owns territory membership semantics. For `UNGROUNDED`, read only trusted capability/memory
+and repository inspection records, including inspected SHA and immutable same-SHA inspection receipt; derive only explicit receipt-verified
 `InspectionBoundary` entries whose direct-user byte-range anchor text names their exact candidates and exclusions, and make no
 Atlas address, ownership, or fact claim.
 
@@ -97,9 +100,10 @@ scope; neither may mint or normalize Atlas names.
 
 ### 3. Validate and Persist
 
-`scope-proposal-guard` requires non-empty scope, no inclusion/exclusion intersection, source labels, and exact mode
-evidence. `GROUNDED` requires catalog-present typed identifiers and catalog/version/project binding. `UNGROUNDED`
-requires ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA and immutable same-SHA inspection receipt,
+`scope-proposal-guard` requires trusted record canonical schema/content hash/producer/version/project-session/
+grant-boundary bindings, non-empty scope, no inclusion/exclusion intersection, source labels, and exact mode evidence.
+`GROUNDED` requires catalog-present typed identifiers and catalog/version/project binding. `UNGROUNDED`
+requires ABSENT/BOOTSTRAP trusted capability/memory record plus trusted inspection SHA and immutable same-SHA inspection receipt,
 non-empty explicit `InspectionBoundary` list with each path and optional symbol receipt-verified, direct-user
 message role, session/project binding, exact byte-range/text match, and same-SHA receipt match verified per boundary;
 receipt candidates limited to those anchors, exclusions, and no Atlas claim. A missing/broad anchor is `HOLD` with
@@ -117,11 +121,12 @@ later plan methods receive proposal ID and exact binding, not model text.
 | Capability                         | Purpose                                                    | Boundary                       |
 | ---------------------------------- | ---------------------------------------------------------- | ------------------------------ |
 | `scope-subject-read`               | read PlanIntent or prior revision/change record            | Maestro durable evidence read  |
-| `stakeholder-message-read`         | read durable message role, session/project, and exact bytes | Maestro durable evidence read |
-| `atlas-capability-read`            | read current capability and mode evidence                  | Atlas read only                |
+| `durable-direct-user-message-read` | read trusted message role, session/project, and exact bytes | Maestro durable evidence read |
+| `capability-memory-read`           | read trusted canonical capability/memory record             | bounded adapter read           |
+| `repository-inspection-read`       | read trusted canonical inspection/anchor receipt record     | bounded adapter read           |
 | `atlas-territory-catalog-read`     | frozen current-Atlas territory catalog adapter; GROUNDED only | Atlas read only             |
 | `scope-proposal-write`             | persist immutable proposal                                 | Maestro durable evidence write |
-| `scope-input-guard`                | require direct-user role, subject session/project, byte range/text, and same-SHA receipt | before reasoning |
+| `scope-input-guard`                | require trusted record schema/hash/producer/grant, direct-user role, subject session/project, byte range/text, and same-SHA receipt | before reasoning |
 | `scope-proposal-guard`             | reject receipt-invalid/unanchored/broad/forged boundary or Atlas metadata | before persistence |
 | `no-governed-task-before-approval` | deny Task/child Session without approved revision identity | Session/Task boundary          |
 
@@ -137,9 +142,11 @@ territory identity. In `UNGROUNDED`, Maestro cannot claim Atlas address, ownersh
 
 `ScopeProposal` stores subject ID/hash, project ID, mode, scope, field sources, status, timestamp, and next owner.
 `GROUNDED` stores typed canonical territory identifiers and current verified catalog/version/project evidence.
-`UNGROUNDED` stores `InspectionBoundary` list, explicit exclusions, exact capability/memory receipt, and inspection
-SHA plus immutable same-SHA inspection receipt and anchor-verification receipt identity; every boundary durable
-direct-user message identity, byte range, and exact anchor text is verified and every receipt candidate is anchor-named.
+`ScopeProposal` stores trusted adapter record identities+hashes. `UNGROUNDED` additionally stores
+`InspectionBoundary` list, explicit exclusions, trusted capability/memory and repository-inspection record
+identities+hashes, inspected SHA, immutable same-SHA inspection receipt, and anchor-verification receipt identity+hash;
+every boundary durable direct-user message identity+hash, byte range, and exact anchor text is verified and every
+receipt candidate is anchor-named.
 Deduplication key is `(scopeSubject, scopeMode, evidenceIdentity, target, methodVersion)`. Replay returns stored
 output; changed evidence or intent produces linked new proposal, never mutation.
 
@@ -148,7 +155,8 @@ output; changed evidence or intent produces linked new proposal, never mutation.
 | Condition                                                           | Result                                     |
 | ------------------------------------------------------------------- | ------------------------------------------ |
 | READY catalog/version/project evidence unratified, missing, empty, stale, or cross-project | `HOLD`; no guessed scope |
-| UNGROUNDED without ABSENT/BOOTSTRAP receipt and inspection SHA            | `HOLD`; no Atlas claim                |
+| Raw, foreign, malformed, altered, or ungranted capability/inspection/anchor record | `HOLD`; no scope                    |
+| UNGROUNDED without ABSENT/BOOTSTRAP trusted record and inspected SHA      | `HOLD`; no Atlas claim                |
 | Empty, absolute, traversal, glob, directory, or Atlas-bearing InspectionBoundary | `HOLD`; no broad fallback       |
 | Missing/nonexistent receipt path or symbol, or inspection SHA mismatch | `HOLD`; no generic scan or invented scope |
 | Assistant/member/tool/model/forged/mismatched anchor, missing direct-user byte range, or broad anchor | `HOLD`; request clarification |

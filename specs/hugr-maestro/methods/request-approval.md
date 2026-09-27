@@ -30,6 +30,7 @@ Committed `PlanValidationRecord` verdict is `VALID`, or user replies to currentl
 planRevisionId       immutable PROPOSED revision identity + content hash
 validationRecordId   current VALID validation record identity + input/policy hashes
 contextRecordId      exact current GROUNDED or UNGROUNDED ContextRecord bound by validation
+currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
 actor                exact ComposedActor { projectId, sessionId, memberId }
 approvalMessageId    explicit user reply message identity; absent while creating presentation
 methodVersion        version of this contract
@@ -43,7 +44,8 @@ approval syntax is required.
 ## Preconditions
 
 1. Revision and validation record resolve, remain immutable, and hash-match presentation.
-2. Validation is currently `VALID` and its exact bound `GROUNDED` or `UNGROUNDED` ContextRecord remains current.
+2. Validation is currently `VALID` and current-context evidence exactly verifies its bound `GROUNDED` or
+   `UNGROUNDED` ContextRecord before presentation and decision.
 3. Presentation belongs to same project/session, precedes user reply, and no newer plan revision, validation,
    or approval presentation intervenes.
 4. Reply is durable direct user conversation input, not Maestro/member/model/tool output.
@@ -88,6 +90,7 @@ creates new revision/validation/presentation; old decision remains history and t
 | ---------------------------------- | ------------------------------------------------------------------------- | ----------------------------------- |
 | `plan-revision-read`               | read exact immutable revision                                             | Maestro durable evidence read       |
 | `plan-validation-record-read`      | verify current VALID result                                               | Maestro durable evidence read       |
+| `current-context-evidence-read`    | verify exact ContextRecord currentness before display/decision            | bounded adapter evidence read       |
 | `session-message-read`             | verify direct user reply, order, role, and current presentation           | OpenCode durable conversation read  |
 | `session-message-write`            | persist exact visible approval target                                     | OpenCode durable conversation write |
 | `approval-decision-write`          | later: append immutable conversation decision                             | only with first governed Task slice |
@@ -117,7 +120,9 @@ message against different presentation/revision holds with visible mismatch reas
 
 | Condition                                                                                       | Result                                                                            |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                  |
+| Unavailable current-context evidence                                                        | `HOLD`; no presentation or decision                                               |
+| Changed current mode/SHA/receipt/anchor binding                                               | `HOLD`; require new context, validation, and presentation                         |
+| Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
 | Explicit user decline/cancel                                                                    | `DECLINED`; preserve decision; no task                                            |
@@ -146,6 +151,8 @@ message against different presentation/revision holds with visible mismatch reas
 7. An ABSENT/BOOTSTRAP capability/memory receipt and inspection SHA with bounded `InspectionBoundary` scope proceeds
    only through `UNGROUNDED` ScopeProposal, `PENDING` PlanRevision, `UNGROUNDED` ContextRecord, and exact `VALID`
    validation before this approval; invalid or unbounded boundary holds earlier.
+8. Current-context verification is required before presentation and decision. Changed mode, SHA, receipt, or anchor
+   binding requires new context, validation, and presentation; unavailable verification holds.
 
 ## Anti-Overengineering Boundary
 

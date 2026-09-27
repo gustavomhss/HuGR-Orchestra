@@ -29,6 +29,7 @@ context freshness changes.
 planRevisionId       immutable PROPOSED revision identity
 planRevision         complete revision fields and field provenance
 contextRecord        current bound GROUNDED or UNGROUNDED ContextRecord
+currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
 priorRevision        optional immutable parent revision
 validationPolicy     frozen deterministic schema/policy version
 methodVersion        version of this contract
@@ -65,10 +66,11 @@ every atlas address appears in bound GROUNDED ContextRecord
 UNGROUNDED revision contains no atlas source tag
 UNGROUNDED ContextRecord has ABSENT/BOOTSTRAP capability/memory receipt and current inspection SHA
 UNGROUNDED ContextRecord persists matching ScopeProposal and inspection-receipt identities
-UNGROUNDED ContextRecord persists stored anchor-verification receipt identity matching ScopeProposal binding
+UNGROUNDED ContextRecord persists stored anchor-verification receipt identity+hash matching ScopeProposal binding
 assumptions contain every maestro-sourced unconfirmed decision
 revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
+current trusted capability/inspection evidence exactly matches ContextRecord mode/SHA/receipt/anchor binding
 canonical scope inclusion/exclusion sets do not intersect
 GROUNDED scope contains typed canonical territory identifiers only
 UNGROUNDED scope contains non-empty explicit receipt-verified, direct-user-anchored SHA-bound InspectionBoundary list plus exclusions, never territory
@@ -89,6 +91,7 @@ issue IDs, timestamp, and result. Only `VALID` yields approval eligibility for t
 | ---------------------------------- | ---------------------------------------------------------- | ------------------------------ |
 | `plan-revision-read`               | read immutable proposed revision                           | Maestro durable evidence read  |
 | `context-record-read`              | verify exact grounding binding                             | Maestro durable evidence read  |
+| `current-context-evidence-read`    | verify current trusted capability/inspection binding        | bounded adapter evidence read  |
 | `validation-policy-read`           | load pinned deterministic policy                           | Maestro configuration read     |
 | `plan-validation-record-write`     | persist checks and verdict                                 | Maestro durable evidence write |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
@@ -119,6 +122,8 @@ overwrite prior decision evidence.
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Missing/empty/malformed policy or check list               | `HOLD`, named validation-instrument failure                                                          |
 | Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
+| Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
+| Current mode/SHA/receipt/anchor binding changed             | `INVALID`; require new context and validation                                                      |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
 | Unknown semantic product conflict                          | remain `VALID` mechanically, rendered as stakeholder-visible uncertainty; never hidden auto-approval |
 | Duplicate trigger                                          | return stored validation record                                                                      |
@@ -142,7 +147,7 @@ overwrite prior decision evidence.
    may otherwise validate structurally. `UN-SEEDED` remains orientation-only.
 4. `UNGROUNDED` ContextRecord missing or mismatching ScopeProposal or inspection-receipt identity yields `INVALID`;
    replay cannot substitute a later boundary receipt.
-5. Missing/mismatched stored anchor-verification receipt identity, or project-wide/repository-wide receipt anchor,
+5. Missing/mismatched stored anchor-verification receipt identity+hash, or project-wide/repository-wide receipt anchor,
    yields `INVALID`; receipt-wide enumeration cannot reach validation.
 6. Empty, absolute, traversal, glob, directory, Atlas-bearing, receipt-missing, symbol-unmatched, or SHA-mismatched
    `InspectionBoundary` yields `INVALID`; it never becomes a canonical territory or generic repository scan.
@@ -151,6 +156,8 @@ overwrite prior decision evidence.
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.
 9. Replaying same inputs returns byte-identical stored validation. Changed revision/context/policy yields new
    linked record and never alters prior result.
+10. Unavailable currentness evidence yields `HOLD`. Changed current mode, SHA, receipt, or anchor binding yields
+    `INVALID` and requires new context plus validation.
 
 ## Anti-Overengineering Boundary
 
