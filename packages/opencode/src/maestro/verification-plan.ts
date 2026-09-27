@@ -77,8 +77,10 @@ function validSHA(value: string) {
   return /^[0-9a-f]{40}$/i.test(value)
 }
 
-function validPaths(paths: readonly string[]) {
+function validPaths(paths: unknown) {
   return (
+    Array.isArray(paths) &&
+    paths.every((path) => typeof path === "string") &&
     paths.length > 0 &&
     new Set(paths).size === paths.length &&
     paths.every(
@@ -92,8 +94,13 @@ function validPaths(paths: readonly string[]) {
   )
 }
 
-function validPackages(packages: readonly PackageID[]) {
-  return new Set(packages).size === packages.length && packages.every((pkg) => packageIDs.includes(pkg))
+function validPackages(packages: unknown) {
+  return (
+    Array.isArray(packages) &&
+    packages.every((pkg) => typeof pkg === "string") &&
+    new Set(packages).size === packages.length &&
+    packages.every((pkg) => packageIDs.some((id) => id === pkg))
+  )
 }
 
 function fallback(input: CompileVerificationPlanInput): VerificationPlan {

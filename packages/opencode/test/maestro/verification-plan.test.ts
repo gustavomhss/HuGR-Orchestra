@@ -128,6 +128,14 @@ describe("compileVerificationPlan", () => {
     }
   })
 
+  test("falls back for malformed input collections", () => {
+    expect(compileVerificationPlan({ ...input, changedPaths: "README.md" as never })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, packages: "opencode" as never })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, packages: [1 as never] })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, reverseDependencies: "core" as never })).toEqual(fallback())
+    expect(compileVerificationPlan({ ...input, reverseDependencies: [1 as never] })).toEqual(fallback())
+  })
+
   test("rejects case-insensitive drive prefixes before docs risk reduction", () => {
     expect(compileVerificationPlan({ ...input, changedPaths: ["d:relative.md"], risk: "docs" })).toEqual(fallback())
   })
