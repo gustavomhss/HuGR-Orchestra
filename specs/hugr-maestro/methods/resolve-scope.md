@@ -36,14 +36,14 @@ target              initial-draft | revision
 methodVersion       version of this contract
 ```
 
-`GROUNDED` uses `READY` capability and current verified catalog/context evidence. `UNGROUNDED` is allowed only
+`GROUNDED` uses `READY` capability and current verified catalog/version/project evidence. `UNGROUNDED` is allowed only
 with `ABSENT` or `BOOTSTRAP` capability and exact capability/memory receipt plus current inspection SHA. Raw paths,
 globs, V1 territory objects, LLM-invented names, and repository-wide fallback scans are invalid input.
 
 ## Preconditions
 
 1. Scope subject and `ComposedActor.projectId` resolve and agree.
-2. `GROUNDED` capability is `READY`; catalog/context evidence is current, non-empty, versioned, and maps project
+2. `GROUNDED` capability is `READY`; catalog/version/project evidence is current, non-empty, versioned, and maps project
    identity without a cross-project fallback.
 3. `UNGROUNDED` capability is exactly `ABSENT` or `BOOTSTRAP`, with exact capability/memory receipt and current
    inspection SHA.
@@ -67,7 +67,7 @@ exclusions, and source labels. `UNGROUNDED` emits bounded proposed scope with no
 ### 3. Validate and Persist
 
 `scope-proposal-guard` requires non-empty scope, no inclusion/exclusion intersection, source labels, and exact mode
-evidence. `GROUNDED` requires catalog-present names and catalog/context binding. `UNGROUNDED` requires
+evidence. `GROUNDED` requires catalog-present names and catalog/version/project binding. `UNGROUNDED` requires
 ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA and rejects Atlas claims. Persist immutable
 `ScopeProposal`; later plan methods receive proposal ID and exact binding, not model text.
 
@@ -99,7 +99,8 @@ territory identity. In `UNGROUNDED`, Maestro cannot claim Atlas address, ownersh
 ## Evidence, Output, and Idempotence
 
 `ScopeProposal` stores subject ID/hash, project ID, mode, scope, field sources, status, timestamp, and next owner.
-`GROUNDED` stores catalog/context evidence. `UNGROUNDED` stores exact capability/memory receipt and inspection SHA.
+`GROUNDED` stores current verified catalog/version/project evidence. `UNGROUNDED` stores exact capability/memory
+receipt and inspection SHA.
 Deduplication key is `(scopeSubject, scopeMode, evidenceIdentity, target, methodVersion)`. Replay returns stored
 output; changed evidence or intent produces linked new proposal, never mutation.
 
@@ -107,7 +108,7 @@ output; changed evidence or intent produces linked new proposal, never mutation.
 
 | Condition                                                           | Result                                     |
 | ------------------------------------------------------------------- | ------------------------------------------ |
-| READY catalog/context unratified, missing, empty, stale, or cross-project | `HOLD`; no guessed scope             |
+| READY catalog/version/project evidence unratified, missing, empty, stale, or cross-project | `HOLD`; no guessed scope |
 | UNGROUNDED without ABSENT/BOOTSTRAP receipt and inspection SHA            | `HOLD`; no Atlas claim                |
 | Unknown/invented name or inclusion/exclusion collision              | `HOLD`; preserve named violation           |
 | Multiple compatible territory choices                               | `CLARIFY`; ask one scope-boundary question |

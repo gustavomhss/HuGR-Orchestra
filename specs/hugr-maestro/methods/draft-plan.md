@@ -39,7 +39,7 @@ substitute for scope-bound plan context.
 
 1. `PlanIntent` and `ScopeProposal` are committed, linked, and have explicit session-orientation reference or
    `UN-SEEDED` state.
-2. Scope proposal is `GROUNDED` with current verified catalog/context evidence or `UNGROUNDED` with exact
+2. Scope proposal is `GROUNDED` with current verified catalog/version/project evidence or `UNGROUNDED` with exact
    ABSENT/BOOTSTRAP capability/memory receipt plus current inspection SHA; its scope is non-empty.
 3. Plan intent has no existing revision; any later change enters `revise-plan`.
 

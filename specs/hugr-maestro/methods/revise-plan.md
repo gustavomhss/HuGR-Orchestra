@@ -41,7 +41,7 @@ Change record must name what changed or failed. A new unrelated goal is not a re
 
 1. Prior revision and change record resolve and bind same project/session.
 2. Scope proposal resolves, matches same project, has non-empty canonical scope, and has GROUNDED current
-   catalog/context evidence or UNGROUNDED ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA.
+   catalog/version/project evidence or UNGROUNDED ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA.
 3. Revision reason matches immutable input evidence.
 4. Prior revision's history, including an approval if any, resolves intact.
 
