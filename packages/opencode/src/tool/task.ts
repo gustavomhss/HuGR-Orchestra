@@ -213,10 +213,9 @@ export const TaskTool = Tool.define(
         }
         const expectedTaskHash = taskHash({
           subagentType: params.subagent_type,
-          prompt: params.prompt,
-          model: params.model,
-          taskID: params.task_id,
-          ...governed,
+            prompt: params.prompt,
+            model: params.model,
+            ...governed,
         })
         if (governed.taskHash !== expectedTaskHash) {
           return yield* Effect.fail(new Error("Governed Task denied: task-hash-mismatch"))
