@@ -8,8 +8,9 @@ V2 redesigns it as immutable revision lineage and execution-ineligibility projec
 ## Purpose
 
 Create one immutable successor `PlanRevision` from an existing revision, an explicit stakeholder change or
-validation issue, and immutable `GROUNDED` or `UNGROUNDED` `ScopeProposal`. It creates successor scope with `PENDING` context binding;
-`assemble-context` binds current Atlas only after successor exists. Prior revision and any approval remain
+validation issue, and immutable `GROUNDED` or `UNGROUNDED` `ScopeProposal` supplied by `resolve-scope`. This method
+creates successor `PlanRevision` only, with `PENDING` context binding. `assemble-context` binds current Atlas only
+after successor exists. Prior revision and any approval remain
 immutable historical evidence; they become ineligible for new governed work.
 
 ```text
@@ -21,7 +22,7 @@ HOLD      lineage/context/change evidence invalid; no revision/task
 ## Trigger
 
 Stakeholder requests an alteration, `validate-plan` returns `INVALID`, or plan owner explicitly requests revision
-of a current proposal/approval. `resolve-scope` runs before this method when scope may change. A stale bound
+of a current proposal/approval. `resolve-scope` supplies successor scope before this method when scope may change. A stale bound
 context re-enters `assemble-context` for unchanged revision.
 
 ## Inputs
@@ -58,7 +59,8 @@ if no honest vN+1 can be proposed.
 
 ### 2. Build Successor
 
-For sufficient input, build vN+1 using same `PlanRevision` schema/provenance rules as `draft-plan`. It carries
+For sufficient input, build vN+1 using same `PlanRevision` schema/provenance rules as `draft-plan`. It consumes
+successor scope supplied by `resolve-scope`; it never creates or alters scope. It carries
 parent revision hash, explicit change reason, field-level diff, ScopeProposal mode/evidence identity, `PENDING` context
 binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta field may claim Atlas-sourced
 successor address, ownership, or fact. `UNGROUNDED` successor preserves its `InspectionBoundary` list and exclusions

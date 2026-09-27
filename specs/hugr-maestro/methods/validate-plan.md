@@ -64,6 +64,7 @@ field source tag is stakeholder | maestro | atlas:<bound-address>
 every atlas address appears in bound GROUNDED ContextRecord
 UNGROUNDED revision contains no atlas source tag
 UNGROUNDED ContextRecord has ABSENT/BOOTSTRAP capability/memory receipt and current inspection SHA
+UNGROUNDED ContextRecord persists matching ScopeProposal and inspection-receipt identities
 assumptions contain every maestro-sourced unconfirmed decision
 revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
@@ -138,12 +139,14 @@ overwrite prior decision evidence.
 3. `UNGROUNDED` revision with an `atlas:` source tag yields `INVALID`. An `UNGROUNDED` ContextRecord missing
    ABSENT/BOOTSTRAP capability/memory receipt or current inspection SHA yields `INVALID`; visible Maestro proposals
    may otherwise validate structurally. `UN-SEEDED` remains orientation-only.
-4. Empty, absolute, traversal, glob, directory, Atlas-bearing, receipt-missing, symbol-unmatched, or SHA-mismatched
+4. `UNGROUNDED` ContextRecord missing or mismatching ScopeProposal or inspection-receipt identity yields `INVALID`;
+   replay cannot substitute a later boundary receipt.
+5. Empty, absolute, traversal, glob, directory, Atlas-bearing, receipt-missing, symbol-unmatched, or SHA-mismatched
    `InspectionBoundary` yields `INVALID`; it never becomes a canonical territory or generic repository scan.
-5. Missing, empty, or malformed policy/check list yields `HOLD`, not a green empty validation.
-6. Natural-language tension not represented in canonical typed fields is rendered as uncertainty for
+6. Missing, empty, or malformed policy/check list yields `HOLD`, not a green empty validation.
+7. Natural-language tension not represented in canonical typed fields is rendered as uncertainty for
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.
-7. Replaying same inputs returns byte-identical stored validation. Changed revision/context/policy yields new
+8. Replaying same inputs returns byte-identical stored validation. Changed revision/context/policy yields new
    linked record and never alters prior result.
 
 ## Anti-Overengineering Boundary
