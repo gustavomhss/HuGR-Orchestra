@@ -182,12 +182,16 @@ Close      merge verification -> provenance -> memory -> outcome
 
 `approval-eligibility-write` is one authoritative serialized transaction: re-read current evidence identity/hash,
 then persist durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` only when it equals validated ContextRecord
-evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Task/child Session fence
-is one authoritative serialized Task-admission transaction under same currentness/revision fence: live-read evidence;
-verify current `ELIGIBLE_FOR_EXECUTION`; reserve/bind deterministic child identity; create or resume bound child; then
-persist admission receipt with decision, validation, ContextRecord, and evidence hashes. Supersession/revision change
-serializes against admission: it either supersedes before admission and denies/no child, or admission receipt wins and
-later supersession cannot retroactively authorize another child. Never check then separately `sessions.create`.
+evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Policy revision is a
+lifecycle-fence generation: policy change atomically supersedes eligibility; all lifecycle/admission writers
+serialize; Task admission compares exact policy revision/hash. Task/child Session fence is one authoritative
+serialized Task-admission transaction under same fence: live-read evidence; verify current `ELIGIBLE_FOR_EXECUTION`;
+first atomically persist `RESERVED` admission row with idempotency key, deterministic child ID, decision/validation/
+ContextRecord/evidence/policy hashes; create or resume only bound child; atomically mark row `CREATED`. Post-create
+receipt failure leaves `RESERVED`/creating recovery; retry resumes only reserved child, never creates another.
+Supersession/revision change serializes against admission: it either supersedes before reservation and denies/no
+child, or reservation/receipt wins and later supersession cannot retroactively authorize another child. Never check
+then separately `sessions.create`.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and

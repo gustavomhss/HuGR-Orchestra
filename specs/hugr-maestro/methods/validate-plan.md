@@ -116,9 +116,11 @@ write, or task creation is granted.
 
 This method can refuse mechanical invalidity only. It cannot change a revision, approve a revision, waive a
 failed rule, infer semantic agreement, or turn `INVALID` into stakeholder acceptance.
-`request-approval` is sole `ELIGIBLE_FOR_EXECUTION` creator, atomically with approved decision. Validation/currentness
-lifecycle atomically replaces existing eligibility with `SUPERSEDED_FOR_EXECUTION` on policy/evidence change,
-unavailable required validation/currentness evidence, or non-`VALID` result.
+`request-approval` is sole `ELIGIBLE_FOR_EXECUTION` creator, atomically with approved decision. Policy revision is
+lifecycle-fence generation: policy change atomically replaces existing eligibility with
+`SUPERSEDED_FOR_EXECUTION`. Validation/currentness lifecycle atomically replaces existing eligibility on policy/
+evidence change, unavailable required validation/currentness evidence, or non-`VALID` result; all lifecycle,
+approval, and Task-admission writers serialize under this fence.
 
 ## Evidence, Output, and Idempotence
 
