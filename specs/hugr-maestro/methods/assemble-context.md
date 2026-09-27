@@ -37,6 +37,7 @@ scopeMode             immutable `GROUNDED` or `UNGROUNDED` mode from PlanRevisio
 scopeEvidence         historical trusted scope evidence retained by PlanRevision ScopeProposal
 currentCapabilityMemoryRecord trusted current capability/memory record identity + hash
 currentRepositoryInspectionRecord trusted current repository inspection record identity + hash
+currentInspectionReceipt immutable current inspection receipt identity + canonical content hash; UNGROUNDED only
 anchorVerificationReceiptId stored immutable anchor-verification receipt identity + hash from ScopeProposal; UNGROUNDED only
 orientationRef        current Atlas Awareness/Orientation reference; UN-SEEDED is orientation-only
 atlasEnvelopeVersion  frozen current-Atlas adapter contract version; absent until foundation corpus ratifies
@@ -119,7 +120,7 @@ freeze, not foundation source evidence.
 | `execution-eligibility-projection-write` | invoke sole durable projection owner on changed current evidence | atomic with context write |
 | `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
 | `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
-| `no-governed-task-before-approval` | require durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
 
 No model skill, shell, live scan, scope re-resolution, product edit, Atlas write, member tool, approval, or task
 creation is granted.
@@ -135,16 +136,18 @@ Maestro binds evidence; it cannot choose scope, promote retrieved text into stak
 ScopeProposal identity/content hash, trusted capability-memory and repository-inspection record identities+hashes,
 timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope address/snapshot, and
 freshness/truncation/budget evidence plus current envelope/catalog identities+hashes defined by frozen seam.
-`UNGROUNDED` stores exact ABSENT/BOOTSTRAP capability/memory receipt identity+hash, current inspection SHA,
-immutable inspection-receipt identity/content hash, and bound
+`UNGROUNDED` stores exact ABSENT/BOOTSTRAP capability/memory receipt identity+hash, current repository-inspection
+record identity+hash, current inspection SHA, immutable current inspection-receipt identity+canonical content hash, and bound
 `InspectionBoundary` list, stored anchor-verification receipt identity+hash, plus exclusions; it contains no Atlas source.
 `UNGROUNDED` also stores every resolved path/anchor relation.
 
 Deduplication key is `(planRevisionId, scopeMode, currentEvidenceIdentityHash, methodVersion)`. Canonical complete
 `currentEvidenceIdentityHash` is GROUNDED capability identity/hash plus current envelope identity/hash plus catalog
-identity/hash; UNGROUNDED capability/memory receipt identity/hash plus inspection SHA plus anchor-verification receipt
-identity/hash. Replay returns stored record only for exact complete current evidence. Any changed component creates
-linked ContextRecord and never replays or replaces prior plan evidence.
+identity/hash; UNGROUNDED capability/memory receipt identity/hash plus current repository-inspection record
+identity/hash plus inspection SHA plus immutable inspection-receipt identity+canonical content hash plus
+anchor-verification receipt identity/hash. Replay returns stored record only for exact complete current evidence. Any
+changed record or receipt content, including same inspection SHA, creates linked ContextRecord and never replays or
+replaces prior plan evidence.
 
 ## Refusal and Recovery
 

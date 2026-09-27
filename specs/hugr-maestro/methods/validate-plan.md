@@ -107,7 +107,7 @@ approval eligibility for this exact revision and current-evidence identity/hash.
 | `execution-eligibility-projection-write` | sole durable owner: atomically write `SUPERSEDED_FOR_EXECUTION` for old ApprovalDecision/current-evidence on changed evidence | validation/currentness lifecycle |
 | `validation-input-guard`           | require exact links/status/policy version                  | before evaluation              |
 | `approval-eligibility-guard`       | expose only current VALID revision to request-approval     | approval boundary              |
-| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
 
 No model skill, Atlas read/write, shell, product edit, external network, member tool, plan mutation, approval
 write, or task creation is granted.

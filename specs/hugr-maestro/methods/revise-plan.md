@@ -99,7 +99,7 @@ supersession; projection failure is `HOLD` before child creation. Persist revisi
 | `plan-revision-write`              | persist successor revision and diff                                      | Maestro durable evidence write |
 | `execution-eligibility-projection-write` | invoke sole durable projection owner for revision/mode supersession | atomic with revision write |
 | `revision-lineage-guard`           | require parent/delta/provenance and invalidate old execution eligibility | before persistence             |
-| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
 
 No live Atlas read/write, shell, product edit, external network, member tool, approval write, Task creation, or
 dispatch is granted.

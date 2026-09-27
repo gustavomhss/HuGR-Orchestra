@@ -86,8 +86,8 @@ plan+validation/context record identities/hashes, exact `currentEvidenceIdentity
 timestamp. Any freshness change receives durable `SUPERSEDED_FOR_EXECUTION` projection: old decision remains
 immutable history, cannot authorize Task/child Session, and transfers nowhere.
 `execution-eligibility-projection-write` in validation/currentness lifecycle writes that projection;
-request-approval writes ApprovalDecision only. Only new context, validation, presentation, and direct user approval
-can authorize execution.
+request-approval writes ApprovalDecision only and never persists revocation. Only new context, validation,
+presentation, and direct user approval can authorize execution.
 
 ## Tools and Guards
 
@@ -101,7 +101,7 @@ can authorize execution.
 | `approval-decision-write`          | append immutable ApprovalDecision after valid direct reply                | before any governed Task           |
 | `approval-input-guard`             | require exact revision/validation/session/current state                   | before display/reply                |
 | `approval-reply-guard`             | require explicit user reply after current presentation                    | before decision persistence         |
-| `no-governed-task-before-approval` | read execution-eligibility projection; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash; any mismatch denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | read execution-eligibility projection; deny missing/stale projection before child creation; require unsuperseded durable direct-user ApprovalDecision bound to same immutable revision, current VALID validation, ContextRecord, and current-evidence identity/hash | Session/Task boundary |
 
 No Atlas read/write, shell, product edit, external account/authentication API, GitHub API, member tool, Task
 creation, or dispatch is granted.
@@ -128,8 +128,9 @@ message against different presentation/revision holds with visible mismatch reas
 | Condition                                                                                       | Result                                                                            |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Unavailable current-context evidence                                                        | `HOLD`; no presentation or decision                                               |
-| Changed mode/capability receipt/SHA/anchor/current-evidence identity                          | `SUPERSEDED_FOR_EXECUTION`; require new context, validation, and presentation     |
+| Changed mode/capability receipt/SHA/anchor/current-evidence identity                          | `HOLD` before presentation/decision; validation/currentness lifecycle owns revocation |
 | Validation/approval current-evidence mismatch                                                  | `HOLD`; named mismatch rejection before child creation                            |
+| Missing/stale execution-eligibility projection                                                  | deny Task/child Session before child creation                                     |
 | Invalid/stale/mismatched revision, validation, context, session, presentation, or message order | `HOLD`; require new presentation                                                |
 | Assistant/member/tool/unrelated reply                                                           | `HOLD`; no decision/task                                                          |
 | Ambiguous user reply/question                                                                   | remain `PENDING`; Maestro asks one confirmation/question                          |
