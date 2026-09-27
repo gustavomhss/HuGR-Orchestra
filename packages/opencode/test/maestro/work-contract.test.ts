@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  validateWorkContract,
-  type WorkArtifactKind,
-  type WorkContractSection,
-} from "../../src/maestro/work-contract"
+import { validateWorkContract, type WorkArtifactKind, type WorkContractSection } from "../../src/maestro/work-contract"
 
 const kinds: WorkArtifactKind[] = ["epic", "issue", "sub-issue", "contract", "task", "work-package"]
 
@@ -17,7 +13,9 @@ const sections: Record<WorkContractSection, string> = {
 
 const names = Object.keys(sections) as WorkContractSection[]
 
-function contractBody(options: { omit?: WorkContractSection; empty?: WorkContractSection; malformed?: WorkContractSection } = {}) {
+function contractBody(
+  options: { omit?: WorkContractSection; empty?: WorkContractSection; malformed?: WorkContractSection } = {},
+) {
   return names
     .filter((name) => name !== options.omit)
     .map((name) => {
@@ -187,16 +185,46 @@ describe("maestro.work-contract", () => {
   test("holds malformed canonical appearances outside fences", () => {
     const malformedBodies = [
       contractBody({ malformed: "Definition of Done" }).replace("# ", "### "),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "  ## Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "> ## Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "- ## Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "## Definition of Done #\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "## Definition of Done \nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "##\tDefinition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "##  Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "#Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "##Definition of Done\nwrong\n\n## Invariants"),
-      contractBody({ omit: "Definition of Done" }).replace("## Invariants", "###Definition of Done\nwrong\n\n## Invariants"),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "  ## Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "> ## Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "- ## Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "## Definition of Done #\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "## Definition of Done \nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "##\tDefinition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "##  Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "#Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "##Definition of Done\nwrong\n\n## Invariants",
+      ),
+      contractBody({ omit: "Definition of Done" }).replace(
+        "## Invariants",
+        "###Definition of Done\nwrong\n\n## Invariants",
+      ),
     ]
 
     for (const body of malformedBodies) {

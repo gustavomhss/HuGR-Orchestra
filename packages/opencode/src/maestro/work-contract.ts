@@ -115,11 +115,7 @@ function hasPrefixedDelimiter(line: string, delimiter: string): boolean {
 
     let digits = index
     while (line[digits] >= "0" && line[digits] <= "9") digits++
-    if (
-      digits > index &&
-      (line[digits] === "." || line[digits] === ")") &&
-      isSpace(line[digits + 1])
-    ) {
+    if (digits > index && (line[digits] === "." || line[digits] === ")") && isSpace(line[digits + 1])) {
       prefixed = true
       index = digits + 1
       continue
@@ -195,13 +191,9 @@ export function validateWorkContract(input: { kind: unknown; body: unknown }): W
     sections[name] = extracted[0]
   }
 
-  const stableReasons = ([
-    "unsupported-kind",
-    "missing-section",
-    "empty-section",
-    "malformed-heading",
-    "duplicate-section",
-  ] as const).filter((reason) => reasons.includes(reason))
+  const stableReasons = (
+    ["unsupported-kind", "missing-section", "empty-section", "malformed-heading", "duplicate-section"] as const
+  ).filter((reason) => reasons.includes(reason))
 
   if (stableReasons.length > 0) return { status: "HOLD", reasons: stableReasons }
   return { status: "VALID", sections }
