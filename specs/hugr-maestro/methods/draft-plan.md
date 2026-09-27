@@ -119,7 +119,9 @@ session-orientation reference, ScopeProposal mode/evidence identity, `PENDING` c
 provenance, v1 identity, status, and timestamp.
 
 Deduplication key is `(admissionRecordId, scopeProposalId, methodVersion)`. Same input returns same stored proposal/question.
-Any stakeholder answer or changed context after v1 enters `revise-plan`; v1 remains immutable.
+Any stakeholder answer changing plan fields after v1 enters `revise-plan`; v1 remains immutable. Capability,
+inspection, or current-evidence freshness change keeps v1 immutable and requires linked ContextRecord, validation,
+presentation, and direct ApprovalDecision instead.
 
 ## Refusal and Recovery
 
@@ -152,8 +154,9 @@ Any stakeholder answer or changed context after v1 enters `revise-plan`; v1 rema
 4. A fabricated Atlas address, missing source label, hidden assumption, or non-`PROPOSED` status is rejected
    before revision persistence.
 5. Missing/mismatched scope proposal holds; draft cannot query Atlas live, broaden scope, or create child work.
-6. Replaying same inputs returns stored identical v1. Changed stakeholder answer or context requires
-   `revise-plan`; it cannot overwrite v1.
+6. Replaying same inputs returns stored identical v1. Changed stakeholder answer affecting plan fields requires
+   `revise-plan`; it cannot overwrite v1. Context freshness change instead creates linked ContextRecord, validation,
+   presentation, and direct ApprovalDecision for same v1.
 
 ## Anti-Overengineering Boundary
 

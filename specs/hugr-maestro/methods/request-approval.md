@@ -158,7 +158,8 @@ message against different presentation/revision holds with visible mismatch reas
    only through `UNGROUNDED` ScopeProposal, `PENDING` PlanRevision, `UNGROUNDED` ContextRecord, and exact `VALID`
    validation before this approval; invalid or unbounded boundary holds earlier.
 8. Current-context verification is required before presentation and decision. Changed mode, SHA, receipt, or anchor
-   binding requires new context, validation, and presentation; unavailable verification holds.
+   binding requires new ContextRecord, validation, presentation, and direct ApprovalDecision on same immutable
+   revision; unavailable verification holds.
 9. Task/child Session fence requires exact current `VALID` validation and approved decision bound to same
    `currentEvidenceIdentityHash`. Freshness change supersedes old approval; revalidation cannot reactivate it.
 

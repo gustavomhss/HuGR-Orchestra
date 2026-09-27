@@ -169,8 +169,9 @@ it never replays prior `VALID` or overwrites prior decision evidence.
     `INVALID` and requires new context plus validation.
 11. Canonical current-evidence identity/hash changes never replay a prior `VALID`; symbol-only anchor requires one
     receipt path and matching persisted resolved path/anchor relation.
-12. Freshness change creates linked `INVALID` and `SUPERSEDED_FOR_EXECUTION` projection. Revalidation cannot revive
-    old approval; only new context, validation, presentation, and direct user approval can authorize execution.
+12. Freshness change creates linked `INVALID` and `SUPERSEDED_FOR_EXECUTION` projection on existing immutable
+    revision. Revalidation cannot revive old approval; only new ContextRecord, validation, presentation, and direct
+    user approval can authorize execution.
 
 ## Anti-Overengineering Boundary
 
