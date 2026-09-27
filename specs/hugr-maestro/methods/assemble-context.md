@@ -14,9 +14,8 @@ before deterministic plan validation. Context cannot be assembled from an admitt
 accepts a `Territory`, and territory does not exist until `draft-plan` proposes canonical scope.
 
 ```text
-READY      bound Atlas context result; next owner validate-plan
-UN-SEEDED  only explicit future Atlas context-envelope declaration permits this result
-HOLD       scope, Atlas seam, context evidence, or freshness is unverified
+READY      bound `GROUNDED` or `UNGROUNDED` ContextRecord; next owner validate-plan
+HOLD       scope, capability, Atlas seam, context evidence, or freshness is unverified
 ```
 
 This method retrieves and binds context. It does not infer scope, draft/revise a plan, write Atlas, approve, or
@@ -25,28 +24,35 @@ create child work.
 ## Trigger
 
 Committed `PlanRevision` is `PROPOSED` with canonical scope and `PENDING` context requirement, or a previously
-bound result became stale.
+bound result became stale. `UN-SEEDED` provider declaration is orientation-only and emits `HOLD` unless independent
+`ABSENT` or `BOOTSTRAP` capability evidence completes an ungrounded binding.
 
 ## Inputs
 
 ```text
 planRevisionId       immutable proposed revision identity + content hash
 canonicalScope        typed territory identifiers and explicit exclusions from revision
-orientationRef        current Atlas Awareness/Orientation reference or explicit future unseeded declaration
+scopeMode             `GROUNDED` or `UNGROUNDED` from immutable ScopeProposal
+capabilityReceipt     exact current Atlas capability/memory receipt
+inspectionSha         exact current repository inspection SHA; required for UNGROUNDED
+orientationRef        current Atlas Awareness/Orientation reference; UN-SEEDED is orientation-only
 atlasEnvelopeVersion  frozen current-Atlas adapter contract version; absent until foundation corpus ratifies
 methodVersion         version of this contract
 ```
 
 An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory format is not valid scope input.
+`UNGROUNDED` is valid only with independently proven `ABSENT` or `BOOTSTRAP` capability plus complete receipt and SHA.
 
 ## Preconditions
 
 1. Revision is committed, immutable, `PROPOSED`, and has canonical non-empty scope.
-2. Every scope identifier resolves through current Atlas territory identity seam.
-3. Current Atlas context-envelope adapter/version is ratified and test-measured.
+2. `GROUNDED` scope identifiers resolve through current Atlas territory identity seam and current adapter/version is
+   ratified and test-measured.
+3. `UNGROUNDED` scope has exact `ABSENT` or `BOOTSTRAP` capability/memory receipt and current inspection SHA.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
-treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases.
+treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
+`UN-SEEDED` declaration also holds unless independent ABSENT/BOOTSTRAP evidence satisfies ungrounded requirements.
 
 ## Candidate Current-Atlas Evidence
 
@@ -77,10 +83,12 @@ freeze, not foundation source evidence.
 
 ## Procedure After Seam Freeze
 
-1. `context-request-schema-guard` validates exact revision hash and canonical scope.
-2. Read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current Atlas proves.
-3. `context-envelope-guard` checks envelope version, scope identity, snapshot/address, freshness, truncation
-   receipt, and configured budget evidence. It does not recreate V1 pack protocol.
+1. `context-request-schema-guard` validates exact revision hash, canonical scope, mode, and required evidence.
+2. For `GROUNDED`, read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current
+   Atlas proves. For `UNGROUNDED`, bind no Atlas envelope or source.
+3. `context-envelope-guard` checks grounded envelope version, scope identity, snapshot/address, freshness,
+   truncation receipt, and configured budget evidence; or checks ungrounded ABSENT/BOOTSTRAP capability/memory
+   receipt plus inspection SHA. It does not recreate V1 pack protocol.
 4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
 
 ## Tools and Guards
@@ -98,35 +106,41 @@ No model skill, shell, product edit, Atlas write, member tool, approval, or task
 
 ## Authority
 
-Maestro binds Atlas evidence; it cannot choose scope, promote retrieved text into stakeholder fact, map empty
-pack to `UN-SEEDED`, waive stale context, or invent current-Atlas adapter fields.
+Maestro binds evidence; it cannot choose scope, promote retrieved text into stakeholder fact, map empty pack or
+`UN-SEEDED` orientation to ungrounded context, waive stale context, or invent current-Atlas adapter fields.
 
 ## Evidence, Output, and Idempotence
 
-`ContextRecord` stores revision hash, canonical scope, Atlas adapter/version, envelope address/snapshot,
-freshness/truncation/budget evidence defined by frozen seam, result, timestamp, and next owner.
+`ContextRecord` mode is exactly `GROUNDED` or `UNGROUNDED`. It stores revision hash, canonical scope, mode, result,
+timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope address/snapshot, and
+freshness/truncation/budget evidence defined by frozen seam. `UNGROUNDED` stores exact ABSENT/BOOTSTRAP
+capability/memory receipt and current inspection SHA; it contains no Atlas source.
 
-Deduplication key is `(planRevisionId, atlasEnvelopeVersion, methodVersion)`. Replay returns stored record;
-new Atlas evidence creates linked result and never replaces prior plan evidence.
+Deduplication key is `(planRevisionId, scopeMode, evidenceIdentity, methodVersion)`. Grounded `evidenceIdentity` is
+envelope snapshot/version. Ungrounded `evidenceIdentity` is capability/memory receipt plus inspection SHA. Replay
+returns stored record; new evidence creates linked result and never replaces prior plan evidence.
 
 ## Refusal and Recovery
 
 | Condition                                                    | Result                                                   |
 | ------------------------------------------------------------ | -------------------------------------------------------- |
 | Non-canonical/empty scope                                    | `HOLD`; no broad lookup or plan/task                     |
-| Atlas adapter unratified                                     | `HOLD`; no direct foundation import from Maestro runtime |
+| Atlas adapter unratified for GROUNDED                        | `HOLD`; no direct foundation import from Maestro runtime |
 | Empty/uncovered/malformed current Atlas pack                 | `HOLD`; never mislabel as unseeded                       |
 | Stale, mismatched, provenance-free, or receipt-free envelope | `HOLD`; preserve reason/evidence                         |
-| Explicit future Atlas unseeded declaration                   | `UN-SEEDED`; preserve declaration identity               |
+| UN-SEEDED provider declaration without independent ABSENT/BOOTSTRAP evidence | `HOLD`; preserve declaration identity |
+| UNGROUNDED without complete capability/memory receipt and inspection SHA | `HOLD`; no context binding                         |
 | Duplicate trigger                                            | return stored record                                     |
 
 ## Acceptance After Ratification
 
-1. Canonical revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
+1. Canonical `GROUNDED` revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
 2. V1-shaped territory/pack input is refused; current foundation adapter is only reader.
 3. Empty/uncovered result holds, never fabricates context or unseeded state.
 4. Stale context, changed scope, or changed adapter version requires new linked record before validation.
 5. No result of this method can create a child Session or Task.
+6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
+   produces `UNGROUNDED` ContextRecord; that record contains capability/memory receipt, inspection SHA, and no Atlas source.
 
 ## Anti-Overengineering Boundary
 

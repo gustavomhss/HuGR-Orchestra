@@ -28,7 +28,7 @@ context freshness changes.
 ```text
 planRevisionId       immutable PROPOSED revision identity
 planRevision         complete revision fields and field provenance
-contextRecord        bound READY or UN-SEEDED ContextRecord
+contextRecord        current bound GROUNDED or UNGROUNDED ContextRecord
 priorRevision        optional immutable parent revision
 validationPolicy     frozen deterministic schema/policy version
 methodVersion        version of this contract
@@ -61,8 +61,9 @@ Run rules over the stored revision only:
 ```text
 all required fields present and non-empty
 field source tag is stakeholder | maestro | atlas:<bound-address>
-every atlas address appears in bound ContextRecord
-UN-SEEDED revision contains no atlas source tag
+every atlas address appears in bound GROUNDED ContextRecord
+UNGROUNDED revision contains no atlas source tag
+UNGROUNDED ContextRecord has ABSENT/BOOTSTRAP capability/memory receipt and current inspection SHA
 assumptions contain every maestro-sourced unconfirmed decision
 revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
@@ -131,8 +132,9 @@ overwrite prior decision evidence.
    `VALID`, an enumerated check ledger, and approval eligibility only for that exact revision.
 2. Missing field source, unbound Atlas address, omitted Maestro assumption, stale context, or illegal revision
    lineage yields `INVALID` with named issue; approval and Task creation are refused.
-3. `UN-SEEDED` revision with an Atlas source tag yields `INVALID`; `UN-SEEDED` revision with visible Maestro
-   proposals may validate structurally.
+3. `UNGROUNDED` revision with an `atlas:` source tag yields `INVALID`. An `UNGROUNDED` ContextRecord missing
+   ABSENT/BOOTSTRAP capability/memory receipt or current inspection SHA yields `INVALID`; visible Maestro proposals
+   may otherwise validate structurally. `UN-SEEDED` remains orientation-only.
 4. Missing, empty, or malformed policy/check list yields `HOLD`, not a green empty validation.
 5. Natural-language tension not represented in canonical typed fields is rendered as uncertainty for
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.

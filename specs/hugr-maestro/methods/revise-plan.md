@@ -8,7 +8,7 @@ V2 redesigns it as immutable revision lineage and execution-ineligibility projec
 ## Purpose
 
 Create one immutable successor `PlanRevision` from an existing revision, an explicit stakeholder change or
-validation issue, and immutable `ScopeProposal`. It creates successor scope with `PENDING` context binding;
+validation issue, and immutable `GROUNDED` or `UNGROUNDED` `ScopeProposal`. It creates successor scope with `PENDING` context binding;
 `assemble-context` binds current Atlas only after successor exists. Prior revision and any approval remain
 immutable historical evidence; they become ineligible for new governed work.
 
@@ -29,7 +29,7 @@ context re-enters `assemble-context` for unchanged revision.
 ```text
 priorRevisionId      immutable vN revision and content hash
 changeRecordId       admitted stakeholder message or validation issue record
-scopeProposalId      immutable current catalog-backed successor scope
+scopeProposalId      immutable current GROUNDED or UNGROUNDED successor scope
 revisionReason       stakeholder-change | validation-remediation
 methodVersion        version of this contract
 ```
@@ -40,7 +40,8 @@ Change record must name what changed or failed. A new unrelated goal is not a re
 ## Preconditions
 
 1. Prior revision and change record resolve and bind same project/session.
-2. Scope proposal resolves, matches same project, and has non-empty canonical names.
+2. Scope proposal resolves, matches same project, has non-empty canonical scope, and has GROUNDED current
+   catalog/context evidence or UNGROUNDED ABSENT/BOOTSTRAP capability/memory receipt plus inspection SHA.
 3. Revision reason matches immutable input evidence.
 4. Prior revision's history, including an approval if any, resolves intact.
 
@@ -51,21 +52,22 @@ Failure yields `HOLD`; no old approval is silently reused.
 ### 1. Frame Delta
 
 Run `frame-revision-delta`. It separates stakeholder-approved existing fields, changed stakeholder facts,
-Atlas-grounded context, Maestro proposals, and remaining material unknown. It returns one `ClarificationNeed`
+Atlas-grounded context, ungrounded successor constraints, Maestro proposals, and remaining material unknown. It returns one `ClarificationNeed`
 if no honest vN+1 can be proposed.
 
 ### 2. Build Successor
 
 For sufficient input, build vN+1 using same `PlanRevision` schema/provenance rules as `draft-plan`. It carries
-parent revision hash, explicit change reason, field-level diff, ScopeProposal/catalog identity, `PENDING` context
-binding, and `PROPOSED` status.
+parent revision hash, explicit change reason, field-level diff, ScopeProposal mode/evidence identity, `PENDING` context
+binding, and `PROPOSED` status. Until successor `ContextRecord` binds, no delta field may claim Atlas-sourced
+successor address, ownership, or fact.
 It never edits vN. Any approval for vN is marked `SUPERSEDED_FOR_EXECUTION` by projection, not deleted or
 rewritten; only vN+1 can later seek validation/approval.
 
 ### 3. Guard and Persist
 
 `revision-lineage-guard` requires parent hash, monotonic revision identity, declared delta, matching ScopeProposal,
-complete field provenance, and no transfer of prior approval. Persist revision and invalidation projection
+complete field provenance, no Atlas-sourced successor fact before successor ContextRecord, and no transfer of prior approval. Persist revision and invalidation projection
 atomically. Pass vN+1 to `assemble-context`.
 
 ## Skills
@@ -80,7 +82,7 @@ atomically. Pass vN+1 to `assemble-context`.
 | ---------------------------------- | ------------------------------------------------------------------------ | ------------------------------ |
 | `plan-revision-read`               | read immutable parent revision                                           | Maestro durable evidence read  |
 | `change-record-read`               | read stakeholder/validation change evidence                              | Maestro durable evidence read  |
-| `scope-proposal-read`              | read immutable catalog-backed successor scope                            | Maestro durable evidence read  |
+| `scope-proposal-read`              | read immutable mode-bound successor scope                               | Maestro durable evidence read  |
 | `plan-revision-write`              | persist successor revision and diff                                      | Maestro durable evidence write |
 | `revision-lineage-guard`           | require parent/delta/provenance and invalidate old execution eligibility | before persistence             |
 | `no-governed-task-before-approval` | deny Task/child Session without current approved revision identity       | Session/Task boundary          |
@@ -95,7 +97,7 @@ approval, decide an ambiguous change, or carry old approval to new revision.
 
 ## Evidence, Output, and Idempotence
 
-vN+1, field diff, parent hash, reason, ScopeProposal/catalog identity, `PENDING` context requirement, and
+vN+1, field diff, parent hash, reason, ScopeProposal mode/evidence identity, `PENDING` context requirement, and
 execution-ineligibility projection are durable evidence. Deduplication key is
 `(priorRevisionId, changeRecordId, scopeProposalId, methodVersion)`. Replay returns stored result. Same parent
 with new change evidence creates a distinct successor attempt; concurrent successors hold until stakeholder
@@ -120,7 +122,7 @@ selects one, never auto-merge.
 
 ## Acceptance
 
-1. Changing one approved plan constraint produces vN+1 with field diff, ScopeProposal/catalog identity, and
+1. Changing one approved plan constraint produces vN+1 with field diff, ScopeProposal mode/evidence identity, and
    `PENDING` context; vN approval remains visible but cannot authorize Task creation.
 2. Invalid validation issue produces only a revision addressing named issue; unrelated fields remain sourced
    from parent/provenance and visible.
@@ -128,6 +130,8 @@ selects one, never auto-merge.
 4. Altered parent hash, missing delta, missing/mismatched ScopeProposal, approval carry-over, or concurrent successor fails
    closed.
 5. Same inputs replay same vN+1; later context binding, validation, and exact new approval action are required.
+6. GROUNDED or UNGROUNDED successor evidence is accepted only under its exact mode rules; successor context assembly
+   always precedes validation, and no pre-bind Atlas-sourced successor fact is accepted.
 
 ## Anti-Overengineering Boundary
 

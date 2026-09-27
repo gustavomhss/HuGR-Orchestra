@@ -29,6 +29,7 @@ Committed `PlanValidationRecord` verdict is `VALID`, or user replies to currentl
 ```text
 planRevisionId       immutable PROPOSED revision identity + content hash
 validationRecordId   current VALID validation record identity + input/policy hashes
+contextRecordId      exact current GROUNDED or UNGROUNDED ContextRecord bound by validation
 actor                exact ComposedActor { projectId, sessionId, memberId }
 approvalMessageId    explicit user reply message identity; absent while creating presentation
 methodVersion        version of this contract
@@ -42,7 +43,7 @@ approval syntax is required.
 ## Preconditions
 
 1. Revision and validation record resolve, remain immutable, and hash-match presentation.
-2. Validation is currently `VALID` and bound context remains current.
+2. Validation is currently `VALID` and its exact bound `GROUNDED` or `UNGROUNDED` ContextRecord remains current.
 3. Presentation belongs to same project/session, precedes user reply, and no newer plan revision, validation,
    or approval presentation intervenes.
 4. Reply is durable direct user conversation input, not Maestro/member/model/tool output.
@@ -78,7 +79,7 @@ needs an explicit acceptance case before it can decide.
 ### 3. Record Immutable Decision
 
 For approve/decline, persist `ApprovalDecision` with ComposedActor, user reply message ID, presentation ID, decision,
-plan+validation record identities/hashes, policy/context versions, and timestamp. Later plan/context/policy change
+plan+validation/context record identities/hashes, policy/context versions, and timestamp. Later plan/context/policy change
 creates new revision/validation/presentation; old decision remains history and transfers nowhere.
 
 ## Tools and Guards
