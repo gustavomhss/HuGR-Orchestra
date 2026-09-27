@@ -49,7 +49,7 @@ An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory for
 2. `GROUNDED` scope identifiers resolve through current Atlas territory identity seam and current adapter/version is
    ratified and test-measured.
 3. `UNGROUNDED` scope has exact `ABSENT` or `BOOTSTRAP` capability/memory receipt, current inspection SHA, and
-   non-empty explicit `InspectionBoundary` list whose entries bind that SHA; it is not treated as territory.
+   non-empty explicit receipt-verified `InspectionBoundary` list whose entries bind that SHA; it is not treated as territory.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
 treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
@@ -89,7 +89,7 @@ freeze, not foundation source evidence.
    Atlas proves. For `UNGROUNDED`, bind no Atlas envelope or source.
 3. `context-envelope-guard` checks grounded envelope version, territory identity, snapshot/address, freshness,
    truncation receipt, and configured budget evidence; or checks ungrounded ABSENT/BOOTSTRAP capability/memory
-   receipt plus inspection SHA and bound `InspectionBoundary` list. It does not recreate V1 pack protocol.
+   receipt plus inspection SHA and bound receipt-verified `InspectionBoundary` list. It does not recreate V1 pack protocol.
 4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
 
 ## Tools and Guards

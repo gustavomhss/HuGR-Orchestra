@@ -69,7 +69,7 @@ revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
 canonical scope inclusion/exclusion sets do not intersect
 GROUNDED scope contains typed canonical territory identifiers only
-UNGROUNDED scope contains non-empty explicit SHA-bound InspectionBoundary list plus exclusions, never territory
+UNGROUNDED scope contains non-empty explicit receipt-verified SHA-bound InspectionBoundary list plus exclusions, never territory
 ```
 
 Scope rules are mode-dependent: territory checks act only on `GROUNDED` identifiers; boundary checks act only on
@@ -138,8 +138,8 @@ overwrite prior decision evidence.
 3. `UNGROUNDED` revision with an `atlas:` source tag yields `INVALID`. An `UNGROUNDED` ContextRecord missing
    ABSENT/BOOTSTRAP capability/memory receipt or current inspection SHA yields `INVALID`; visible Maestro proposals
    may otherwise validate structurally. `UN-SEEDED` remains orientation-only.
-4. Empty, glob, directory, repository-wide, invented, or SHA-unbound `InspectionBoundary` yields `INVALID`; it
-   never becomes a canonical territory or broad fallback.
+4. Empty, absolute, traversal, glob, directory, Atlas-bearing, receipt-missing, symbol-unmatched, or SHA-mismatched
+   `InspectionBoundary` yields `INVALID`; it never becomes a canonical territory or generic repository scan.
 5. Missing, empty, or malformed policy/check list yields `HOLD`, not a green empty validation.
 6. Natural-language tension not represented in canonical typed fields is rendered as uncertainty for
    stakeholder; validator does not hallucinate a semantic defect or pass it as approval.

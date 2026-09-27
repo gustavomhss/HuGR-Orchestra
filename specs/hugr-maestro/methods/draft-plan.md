@@ -41,7 +41,7 @@ substitute for scope-bound plan context.
    `UN-SEEDED` state.
 2. Scope proposal is `GROUNDED` with current verified catalog/version/project evidence or `UNGROUNDED` with exact
    ABSENT/BOOTSTRAP capability/memory receipt plus current inspection SHA and non-empty explicit
-   `InspectionBoundary` list plus exclusions; its mode-dependent scope is non-empty.
+   receipt-verified `InspectionBoundary` list plus exclusions; its mode-dependent scope is non-empty.
 3. Plan intent has no existing revision; any later change enters `revise-plan`.
 
 Precondition failure yields `HOLD`; it does not reconstruct a missing plan from conversation text.
