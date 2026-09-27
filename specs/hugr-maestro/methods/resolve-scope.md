@@ -54,14 +54,18 @@ repository-wide fallback scans are invalid input.
   symbol?: exact source symbol,
   stakeholderMessageId: exact durable direct-user message identity,
   stakeholderByteRange: exact byte range in that message,
-  stakeholderAnchorText: exact bytes in range exactly naming path or optional symbol
+  stakeholderAnchorText: exact bytes in range exactly naming path or optional symbol,
+  anchorKind: path | symbol,
+  resolvedPath: boundary path bound to anchor
 }
 ```
 
 An immutable inspection receipt, keyed by exact inspected repository SHA, contains inspected file paths and
 discovered symbols per path. Every boundary references a durable direct-user message identity and exact byte range.
-Exact range text must exactly name its boundary path or optional symbol; every boundary path must occur in same-SHA receipt
-and optional symbol must occur under that path. Receipt may contain only candidates named by direct-user anchor text.
+Exact range text must exactly name its boundary path or optional symbol. A path anchor binds that exact path. A
+symbol-only anchor is valid only when same-SHA inspection receipt proves symbol exists in exactly one path; its
+resolved path must equal boundary path. Every boundary path must occur in same-SHA receipt and optional symbol must
+occur under that path. Receipt may contain only candidates named by direct-user anchor text.
 A generic, project-wide, or repository-wide anchor/enumeration is invalid. Boundaries are non-empty and explicit.
 Reject assistant/member/tool/model/forged/mismatched anchor, absolute paths, `.`/`..` traversal segments, glob
 metacharacters, directory paths, missing/nonexistent receipt path, missing/nonexistent symbol, SHA mismatch, and all
@@ -76,8 +80,8 @@ is mode-dependent: `GROUNDED` contains typed canonical Atlas `Territory` identif
    identity without a cross-project fallback.
 3. `UNGROUNDED` trusted capability/memory record is exactly `ABSENT` or `BOOTSTRAP`, and trusted repository
    inspection record supplies current inspected SHA; its immutable receipt is keyed by that SHA and its non-empty explicit `InspectionBoundary` list
-   has exact direct-user message identity/byte-range anchor text matching every candidate path/symbol and receipt
-   paths and symbols.
+   has exact direct-user message identity/byte-range anchor text and resolved path relation matching every candidate
+   path/symbol and receipt paths and symbols.
 
 Precondition failure is `HOLD`. Empty grounded catalog is not an empty scope success.
 
@@ -88,7 +92,7 @@ Precondition failure is `HOLD`. Empty grounded catalog is not an empty scope suc
 For `GROUNDED`, read typed canonical territory identifiers, owner, tier, and catalog address/version only. `resolve-scope` does not read
 Pack or `globs`; Atlas owns territory membership semantics. For `UNGROUNDED`, read only trusted capability/memory
 and repository inspection records, including inspected SHA and immutable same-SHA inspection receipt; derive only explicit receipt-verified
-`InspectionBoundary` entries whose direct-user byte-range anchor text names their exact candidates and exclusions, and make no
+`InspectionBoundary` entries whose direct-user byte-range anchor text and resolved paths name their exact candidates and exclusions, and make no
 Atlas address, ownership, or fact claim.
 
 ### 2. Frame Candidate Scope
@@ -106,7 +110,8 @@ grant-boundary bindings, non-empty scope, no inclusion/exclusion intersection, s
 requires ABSENT/BOOTSTRAP trusted capability/memory record plus trusted inspection SHA and immutable same-SHA inspection receipt,
 non-empty explicit `InspectionBoundary` list with each path and optional symbol receipt-verified, direct-user
 message role, session/project binding, exact byte-range/text match, and same-SHA receipt match verified per boundary;
-receipt candidates limited to those anchors, exclusions, and no Atlas claim. A missing/broad anchor is `HOLD` with
+symbol-only anchor requires exactly one receipt path and persisted resolved-path relation; receipt candidates are
+limited to those anchors, exclusions, and no Atlas claim. A missing/broad/ambiguous anchor is `HOLD` with
 `ClarificationNeed`, not model judgment. Persist immutable `ScopeProposal` plus anchor-verification receipt identity;
 later plan methods receive proposal ID and exact binding, not model text.
 
@@ -145,7 +150,8 @@ territory identity. In `UNGROUNDED`, Maestro cannot claim Atlas address, ownersh
 `ScopeProposal` stores trusted adapter record identities+hashes. `UNGROUNDED` additionally stores
 `InspectionBoundary` list, explicit exclusions, trusted capability/memory and repository-inspection record
 identities+hashes, inspected SHA, immutable same-SHA inspection receipt, and anchor-verification receipt identity+hash;
-every boundary durable direct-user message identity+hash, byte range, and exact anchor text is verified and every
+every boundary durable direct-user message identity+hash, byte range, exact anchor text, anchor kind, and resolved-path
+relation is verified and every
 receipt candidate is anchor-named.
 Deduplication key is `(scopeSubject, scopeMode, evidenceIdentity, target, methodVersion)`. Replay returns stored
 output; changed evidence or intent produces linked new proposal, never mutation.
@@ -159,6 +165,7 @@ output; changed evidence or intent produces linked new proposal, never mutation.
 | UNGROUNDED without ABSENT/BOOTSTRAP trusted record and inspected SHA      | `HOLD`; no Atlas claim                |
 | Empty, absolute, traversal, glob, directory, or Atlas-bearing InspectionBoundary | `HOLD`; no broad fallback       |
 | Missing/nonexistent receipt path or symbol, or inspection SHA mismatch | `HOLD`; no generic scan or invented scope |
+| Symbol-only anchor resolving to zero or multiple receipt paths | `HOLD`; require exact path clarification |
 | Assistant/member/tool/model/forged/mismatched anchor, missing direct-user byte range, or broad anchor | `HOLD`; request clarification |
 | Unknown/invented territory identifier or inclusion/exclusion collision | `HOLD`; preserve named violation         |
 | Multiple compatible territory choices                               | `CLARIFY`; ask one scope-boundary question |
@@ -179,6 +186,8 @@ output; changed evidence or intent produces linked new proposal, never mutation.
    validation.
 9. Assistant anchor or user message whose role, session/project, byte range, text, or receipt SHA mismatches holds;
    it cannot create ScopeProposal.
+10. Symbol-only anchor whose receipt symbol exists in exactly one path persists that resolved path/anchor relation;
+    zero or multiple paths hold.
 
 ## Anti-Overengineering Boundary
 

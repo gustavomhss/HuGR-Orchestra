@@ -30,6 +30,7 @@ planRevisionId       immutable PROPOSED revision identity
 planRevision         complete revision fields and field provenance
 contextRecord        current bound GROUNDED or UNGROUNDED ContextRecord
 currentContextEvidence current trusted capability/inspection verification for ContextRecord binding
+currentEvidenceIdentityHash canonical current-evidence identity + hash for ContextRecord mode/SHA/receipt/anchor binding
 priorRevision        optional immutable parent revision
 validationPolicy     frozen deterministic schema/policy version
 methodVersion        version of this contract
@@ -67,6 +68,7 @@ UNGROUNDED revision contains no atlas source tag
 UNGROUNDED ContextRecord has ABSENT/BOOTSTRAP capability/memory receipt and current inspection SHA
 UNGROUNDED ContextRecord persists matching ScopeProposal and inspection-receipt identities
 UNGROUNDED ContextRecord persists stored anchor-verification receipt identity+hash matching ScopeProposal binding
+UNGROUNDED ContextRecord persists resolved path/anchor relation; symbol-only anchor resolves to exactly one receipt path
 assumptions contain every maestro-sourced unconfirmed decision
 revision parent/version/status transition is legal and immutable
 bound context identity/revision/freshness still holds
@@ -77,7 +79,7 @@ UNGROUNDED scope contains non-empty explicit receipt-verified, direct-user-ancho
 ```
 
 Scope rules are mode-dependent: territory checks act only on `GROUNDED` identifiers; boundary checks act only on
-`UNGROUNDED` `InspectionBoundary` entries. Natural-language contradiction detection is not claimed; unresolved
+`UNGROUNDED` `InspectionBoundary` entries and persisted resolved path/anchor relations. Natural-language contradiction detection is not claimed; unresolved
 semantic conflict belongs to stakeholder review or `clarify-decision`.
 
 ### 3. Persist Verdict
@@ -112,9 +114,10 @@ failed rule, infer semantic agreement, or turn `INVALID` into stakeholder accept
 ledger, exact failure paths, verdict, timestamp, and next owner. The check ledger prevents a policy/parser
 failure from looking like a clean empty result.
 
-Deduplication key is `(planRevisionId, contextRecordId, validationPolicyVersion, methodVersion)`. Replay
-returns stored verdict. New policy or freshness evidence creates a linked new validation record; it cannot
-overwrite prior decision evidence.
+Deduplication key is `(planRevisionId, contextRecordId, currentEvidenceIdentityHash, validationPolicyVersion,
+methodVersion)`. Replay returns stored verdict only for exact canonical current-evidence identity/hash. Current
+capability/inspection mode, SHA, receipt, or anchor binding change creates linked `INVALID` or new validation record;
+it never replays prior `VALID` or overwrites prior decision evidence.
 
 ## Refusal and Recovery
 
@@ -124,6 +127,7 @@ overwrite prior decision evidence.
 | Missing/unresolvable revision/context evidence             | `HOLD`, preserve input identity/reason                                                               |
 | Currentness evidence unavailable                            | `HOLD`, no approval/task                                                                            |
 | Current mode/SHA/receipt/anchor binding changed             | `INVALID`; require new context and validation                                                      |
+| Symbol-only anchor zero/multiple-path or resolved-path relation mismatch | `INVALID`; require resolved scope/context                         |
 | Failed required/provenance/lineage/freshness/conflict rule | `INVALID`, durable issue list; no approval/task                                                      |
 | Unknown semantic product conflict                          | remain `VALID` mechanically, rendered as stakeholder-visible uncertainty; never hidden auto-approval |
 | Duplicate trigger                                          | return stored validation record                                                                      |
@@ -158,6 +162,8 @@ overwrite prior decision evidence.
    linked record and never alters prior result.
 10. Unavailable currentness evidence yields `HOLD`. Changed current mode, SHA, receipt, or anchor binding yields
     `INVALID` and requires new context plus validation.
+11. Canonical current-evidence identity/hash changes never replay a prior `VALID`; symbol-only anchor requires one
+    receipt path and matching persisted resolved path/anchor relation.
 
 ## Anti-Overengineering Boundary
 

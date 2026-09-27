@@ -55,8 +55,9 @@ An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory for
    ratified and test-measured.
 3. `UNGROUNDED` scope trusted evidence has exact `ABSENT` or `BOOTSTRAP` capability/memory record, current inspection SHA, and
    immutable same-SHA inspection receipt; every non-empty explicit `InspectionBoundary` path and optional symbol
-   matches that receipt and has stored direct-user anchor-verification receipt. Receipt candidates are limited to
-   those verified anchors. It is not treated as territory.
+    matches that receipt and has stored direct-user anchor-verification receipt and resolved path/anchor relation.
+    A symbol-only anchor resolves to exactly one receipt path. Receipt candidates are limited to those verified
+    anchors. It is not treated as territory.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
 treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
@@ -99,7 +100,8 @@ freeze, not foundation source evidence.
    their exact identity/hash/mode/receipt/SHA/anchor match with ScopeProposal evidence, then checks grounded envelope version, territory identity, snapshot/address, freshness,
    truncation receipt, and configured budget evidence; or checks ungrounded ABSENT/BOOTSTRAP capability/memory
    receipt plus inspection SHA and immutable inspection receipt identity. For every ungrounded boundary, it verifies
-   path and optional symbol against receipt at exact SHA and revalidates stored anchor-verification receipt identity;
+   path and optional symbol against receipt at exact SHA, revalidates stored anchor-verification receipt identity,
+   and verifies persisted resolved path/anchor relation; it holds symbol-only zero/multiple-path resolution;
    it rejects broad anchors and receipt candidates absent a verified anchor. It never trusts a raw supplied anchor ID,
    performs no live scan or re-resolution, and does not recreate V1 pack protocol.
 4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
@@ -136,6 +138,7 @@ timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope add
 freshness/truncation/budget evidence defined by frozen seam. `UNGROUNDED` stores exact ABSENT/BOOTSTRAP
 capability/memory receipt, current inspection SHA, immutable inspection-receipt identity/content hash, and bound
 `InspectionBoundary` list, stored anchor-verification receipt identity+hash, plus exclusions; it contains no Atlas source.
+`UNGROUNDED` also stores every resolved path/anchor relation.
 
 Deduplication key is `(planRevisionId, scopeMode, evidenceIdentity, methodVersion)`. Grounded `evidenceIdentity` is
 envelope snapshot/version. Ungrounded `evidenceIdentity` is capability/memory receipt plus inspection SHA plus
@@ -156,6 +159,7 @@ prior plan evidence.
 | Missing/mismatched ScopeProposal or inspection-receipt identity/content | `HOLD`; no re-resolution or live scan             |
 | Changed current mode, capability/inspection receipt, SHA, or anchor binding | `HOLD`; require newly resolved scope/context      |
 | Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
+| Missing/mismatched resolved path/anchor relation or ambiguous symbol-only anchor | `HOLD`; no context binding                 |
 | Duplicate trigger                                            | return stored record                                     |
 
 ## Acceptance After Ratification
