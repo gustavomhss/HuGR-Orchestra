@@ -81,12 +81,11 @@ describe("compileVerificationPlan", () => {
   })
 
   test("selects workflow checks", () => {
-    expect(compileVerificationPlan({ ...input, changedPaths: [".github/workflows/ci.yml"], risk: "workflow" })).toEqual({
+    expect(compileVerificationPlan({ ...input, changedPaths: [".github/workflows/test.yml"], risk: "workflow" })).toEqual({
       baseSHA: input.baseSHA,
       headSHA: input.headSHA,
-      required: ["generated", "godfile", "linux-unit", "windows-unit"],
+      required: ["atlas", "generated", "godfile", "linux-unit", "windows-unit"],
       skipped: [
-        { id: "atlas", reason: "not-selected" },
         { id: "core-unit", reason: "not-selected" },
         { id: "docs", reason: "not-selected" },
         { id: "opencode-unit", reason: "not-selected" },

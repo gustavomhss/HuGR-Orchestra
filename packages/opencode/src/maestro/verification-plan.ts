@@ -52,7 +52,7 @@ export function compileVerificationPlan(input: CompileVerificationPlanInput): Ve
     if (!input.changedPaths.every((path) => path.startsWith(".github/workflows/") || path === "script/godfile.ts")) {
       return fallback(input)
     }
-    return selected(input, ["godfile", "generated", "linux-unit", "windows-unit"])
+    return selected(input, ["godfile", "generated", "linux-unit", "windows-unit", "atlas"])
   }
 
   if (input.risk === "docs") {
