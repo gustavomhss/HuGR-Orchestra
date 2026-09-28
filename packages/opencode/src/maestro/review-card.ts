@@ -88,8 +88,8 @@ function validFinding(input: unknown, checks: readonly ReviewCheck[]): input is 
 
 function record(input: unknown, keys: readonly string[]): input is Record<string, unknown> {
   if (input === null || typeof input !== "object" || Array.isArray(input)) return false
-  const inputKeys = Object.keys(input)
-  return inputKeys.length === keys.length && inputKeys.every((key) => keys.includes(key))
+  const inputKeys = Reflect.ownKeys(input)
+  return inputKeys.length === keys.length && inputKeys.every((key) => typeof key === "string" && keys.includes(key))
 }
 
 function nonempty(input: unknown): input is string {

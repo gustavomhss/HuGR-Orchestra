@@ -77,6 +77,10 @@ describe("Maestro artifact review cards", () => {
       status: "HOLD",
       reason: "transcript-forbidden",
     })
+    expect(recordReviewCard({ ...card, [Symbol("authorTranscript")]: "private reasoning" })).toEqual({
+      status: "HOLD",
+      reason: "invalid-card",
+    })
     expect(recordReviewCard({ ...card, contract: "Transcript handling changes nowhere." })).toMatchObject({
       status: "RECORDED",
     })
