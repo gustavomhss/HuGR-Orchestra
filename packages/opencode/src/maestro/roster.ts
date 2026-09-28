@@ -7,22 +7,22 @@ import PROMPT_LUCY from "../agent/prompt/lucy.txt"
 import PROMPT_PATTY from "../agent/prompt/patty.txt"
 import PROMPT_ROSIE from "../agent/prompt/rosie.txt"
 
-export const nativeProfiles = {
-  execution: {
+export const nativeProfiles = Object.freeze({
+  execution: Object.freeze({
     "*": "deny",
     read: "allow",
     glob: "allow",
     grep: "allow",
     bash: "allow",
     edit: "allow",
-  },
-  review: {
+  } as const),
+  review: Object.freeze({
     "*": "deny",
     read: "allow",
     glob: "allow",
     grep: "allow",
-  },
-} as const
+  } as const),
+} as const)
 
 export type RosterMember = {
   readonly displayName: string
