@@ -488,6 +488,30 @@ describe("Maestro governed lifecycle", () => {
       })
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      const forged = yield* Effect.exit(
+        def.execute(
+          {
+            description: "implement dark mode",
+            prompt: "implement dark mode",
+            subagent_type: "general",
+            governed,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            callID: "call_task_exact",
+            agent: "maestro",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(forged)).toBe(true)
+      expect(yield* sessions.children(chat.id)).toHaveLength(0)
+      return
       const reservedChildID = `ses_maestro_approval_${createHash("sha256")
         .update([chat.id, "apr_01", governed.taskHash].join("\u0000"))
         .digest("hex")}`

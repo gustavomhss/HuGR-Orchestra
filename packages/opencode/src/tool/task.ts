@@ -21,6 +21,7 @@ import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { and, asc, eq } from "drizzle-orm"
 import { verifyGovernedTask } from "@/maestro/governed-task"
 import { taskHash } from "@/maestro/task-hash"
+import { recordApproval } from "@/maestro/approval-record"
 import { createHash } from "node:crypto"
 import { EventV2Bridge } from "@/event-v2-bridge"
 
@@ -231,6 +232,29 @@ export const TaskTool = Tool.define(
         })
         if (governed.taskHash !== expectedTaskHash) {
           return yield* Effect.fail(new Error("Governed Task denied: task-hash-mismatch"))
+        }
+        const directApproval = yield* recordApproval(ctx.sessionID).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.provideService(EventV2Bridge.Service, events),
+        )
+        if (directApproval.status !== "APPROVED") {
+          return yield* Effect.fail(new Error("Governed Task denied: direct-approval-not-approved"))
+        }
+        const directDecision = directApproval.decision
+        if (
+          directDecision.sessionID !== governed.sessionID ||
+          directDecision.actor.projectId !== governed.projectID ||
+          directDecision.actor.memberId !== governed.memberID ||
+          directDecision.approvalMessageID !== governed.approvalMessageID ||
+          directDecision.planRevisionID !== governed.planRevisionID ||
+          directDecision.revisionHash !== governed.revisionHash ||
+          directDecision.validationRecordID !== governed.validationRecordID ||
+          directDecision.validationHash !== governed.validationHash ||
+          directDecision.contextHash !== governed.contextHash ||
+          directDecision.policyHash !== governed.policyHash ||
+          directDecision.taskHash !== governed.taskHash
+        ) {
+          return yield* Effect.fail(new Error("Governed Task denied: direct-approval-binding-mismatch"))
         }
         const decisions = yield* database.db
           .select({ data: EventTable.data })
