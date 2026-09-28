@@ -95,6 +95,12 @@ describe("Maestro roster", () => {
     expect(() => createRoster([roster[0]!, { ...roster[0]! }])).toThrow("Roster memberId must be unique: maestro")
   })
 
+  test("rejects malformed member ID", () => {
+    expect(() => createRoster([{ ...roster[0]!, memberId: "Maestro" }])).toThrow(
+      "Roster memberId must be canonical: Maestro",
+    )
+  })
+
   test("display rename preserves member identity", () => {
     const renamed = createRoster([{ ...roster[1]!, displayName: "Ana" }])
 

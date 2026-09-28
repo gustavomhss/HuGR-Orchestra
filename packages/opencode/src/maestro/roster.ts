@@ -92,6 +92,7 @@ export function createRoster(members: readonly RosterMember[]): Roster {
   const memberIds = new Set<string>()
   return Object.freeze(
     members.map((member) => {
+      if (!canonicalMemberId(member.memberId)) throw new Error(`Roster memberId must be canonical: ${member.memberId}`)
       if (memberIds.has(member.memberId)) throw new Error(`Roster memberId must be unique: ${member.memberId}`)
       memberIds.add(member.memberId)
       return Object.freeze({ ...member, forbiddenActions: Object.freeze([...member.forbiddenActions]) })
@@ -100,10 +101,14 @@ export function createRoster(members: readonly RosterMember[]): Roster {
 }
 
 export function lookupRosterMember(memberId: unknown, members: Roster = roster): RosterLookup {
-  if (typeof memberId !== "string" || !/^[a-z]+(?:-[a-z]+)*$/.test(memberId)) {
+  if (!canonicalMemberId(memberId)) {
     return { status: "HOLD", reason: "malformed-member-id" }
   }
   const member = members.find((candidate) => candidate.memberId === memberId)
   if (!member) return { status: "HOLD", reason: "unknown-member-id" }
   return { status: "FOUND", member }
+}
+
+function canonicalMemberId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-z]+(?:-[a-z]+)*$/.test(value)
 }
