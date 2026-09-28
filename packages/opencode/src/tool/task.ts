@@ -24,6 +24,9 @@ import { taskHash } from "@/maestro/task-hash"
 import { recordApproval } from "@/maestro/approval-record"
 import { createHash } from "node:crypto"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { nativeProfiles, roster } from "@/maestro/roster"
+import { Permission } from "@/permission"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -126,6 +129,17 @@ export const TaskTool = Tool.define(
       ctx: Tool.Context,
     ) {
       const cfg = yield* config.get()
+      const caller =
+        (yield* agent.get(ctx.agent)) ?? (yield* agent.list()).find((candidate) => candidate.name === ctx.agent)
+      const nativeSeat = caller?.native
+        ? roster.find((member) => member.memberId === caller.id && member.nativeProfile)
+        : undefined
+      if (nativeSeat?.nativeProfile) {
+        const nativePermission = Permission.fromConfig(nativeProfiles[nativeSeat.nativeProfile])
+        if (Permission.evaluate(id, params.subagent_type, nativePermission).action === "deny") {
+          return yield* new PermissionV1.DeniedError({ ruleset: nativePermission })
+        }
+      }
       const runInBackground = params.background === true
       let governedChildID: SessionID | undefined
       let governedPresentationID: string | undefined
