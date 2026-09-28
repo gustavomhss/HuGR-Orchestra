@@ -15,6 +15,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
+import { roster } from "../../src/maestro/roster"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -56,6 +57,65 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("title")
     expect(names).toContain("summary")
   }),
+)
+
+it.instance("registers native team specialists with fixed profiles", () =>
+  Effect.gen(function* () {
+    for (const member of roster.filter((candidate) => candidate.nativeProfile && candidate.prompt)) {
+      const agent = yield* load((svc) => svc.get(member.memberId))
+      expect(agent).toMatchObject({
+        id: member.memberId,
+        name: member.displayName,
+        mode: "subagent",
+        native: true,
+        prompt: member.prompt,
+      })
+      expect(evalPerm(agent, "read")).toBe("allow")
+      expect(evalPerm(agent, "glob")).toBe("allow")
+      expect(evalPerm(agent, "grep")).toBe("allow")
+      expect(evalPerm(agent, "task")).toBe("deny")
+      expect(evalPerm(agent, "webfetch")).toBe("deny")
+      expect(evalPerm(agent, "websearch")).toBe("deny")
+      expect(evalPerm(agent, "skill")).toBe("deny")
+      expect(evalPerm(agent, "external_directory")).toBe("deny")
+      expect(evalPerm(agent, "bash")).toBe(member.nativeProfile === "execution" ? "allow" : "deny")
+      expect(evalPerm(agent, "edit")).toBe(member.nativeProfile === "execution" ? "allow" : "deny")
+    }
+  }),
+)
+
+it.instance(
+  "native team config only permits model variant and temperature",
+  () =>
+    Effect.gen(function* () {
+      const lucy = yield* load((svc) => svc.get("lucy"))
+      expect(String(lucy?.model?.providerID)).toBe("anthropic")
+      expect(String(lucy?.model?.modelID)).toBe("claude-3")
+      expect(lucy?.variant).toBe("fast")
+      expect(lucy?.temperature).toBe(0.2)
+      expect(lucy?.name).toBe("Lucy")
+      expect(lucy?.mode).toBe("subagent")
+      expect(lucy?.native).toBe(true)
+      expect(lucy?.prompt).toBe(roster.find((member) => member.memberId === "lucy")?.prompt)
+      expect(evalPerm(lucy, "edit")).toBe("deny")
+    }),
+  {
+    config: {
+      permission: { edit: "allow" },
+      agent: {
+        lucy: {
+          model: "anthropic/claude-3",
+          variant: "fast",
+          temperature: 0.2,
+          name: "Not Lucy",
+          mode: "primary",
+          prompt: "Not Lucy prompt",
+          disable: true,
+          permission: { edit: "allow" },
+        },
+      },
+    },
+  },
 )
 
 it.instance("build agent has correct default properties", () =>
@@ -749,6 +809,7 @@ it.instance(
       agent: {
         build: { disable: true },
         plan: { disable: true },
+        maestro: { disable: true },
       },
     },
   },

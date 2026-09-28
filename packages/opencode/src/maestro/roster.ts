@@ -1,3 +1,29 @@
+import PROMPT_BILLY from "../agent/prompt/billy.txt"
+import PROMPT_BOBBY from "../agent/prompt/bobby.txt"
+import PROMPT_CHARLIE from "../agent/prompt/charlie.txt"
+import PROMPT_FRANKIE from "../agent/prompt/frankie.txt"
+import PROMPT_JIMMY from "../agent/prompt/jimmy.txt"
+import PROMPT_LUCY from "../agent/prompt/lucy.txt"
+import PROMPT_PATTY from "../agent/prompt/patty.txt"
+import PROMPT_ROSIE from "../agent/prompt/rosie.txt"
+
+export const nativeProfiles = {
+  execution: {
+    "*": "deny",
+    read: "allow",
+    glob: "allow",
+    grep: "allow",
+    bash: "allow",
+    edit: "allow",
+  },
+  review: {
+    "*": "deny",
+    read: "allow",
+    glob: "allow",
+    grep: "allow",
+  },
+} as const
+
 export type RosterMember = {
   readonly displayName: string
   readonly memberId: string
@@ -5,6 +31,8 @@ export type RosterMember = {
   readonly abilityClass: string
   readonly returnCard: string
   readonly forbiddenActions: readonly string[]
+  readonly nativeProfile?: keyof typeof nativeProfiles
+  readonly prompt?: string
 }
 
 export type Roster = readonly RosterMember[]
@@ -29,6 +57,8 @@ export const roster = createRoster([
     abilityClass: "scoped repository write",
     returnCard: "implementation card, gates, diff receipt",
     forbiddenActions: ["approve", "review own work", "merge"],
+    nativeProfile: "execution",
+    prompt: PROMPT_CHARLIE,
   },
   {
     displayName: "Patty",
@@ -37,6 +67,8 @@ export const roster = createRoster([
     abilityClass: "scoped repository write",
     returnCard: "implementation card, sensory evidence, diff receipt",
     forbiddenActions: ["approve", "review own work", "merge"],
+    nativeProfile: "execution",
+    prompt: PROMPT_PATTY,
   },
   {
     displayName: "Lucy",
@@ -45,6 +77,8 @@ export const roster = createRoster([
     abilityClass: "read-only artifact review",
     returnCard: "cited APPROVE/FIX_FIRST/REJECT card",
     forbiddenActions: ["edit implementation", "receive author transcript", "merge"],
+    nativeProfile: "review",
+    prompt: PROMPT_LUCY,
   },
   {
     displayName: "Bobby",
@@ -53,6 +87,8 @@ export const roster = createRoster([
     abilityClass: "read-only contract review",
     returnCard: "seam/contract verdict",
     forbiddenActions: ["implement product", "merge"],
+    nativeProfile: "review",
+    prompt: PROMPT_BOBBY,
   },
   {
     displayName: "Billy",
@@ -61,6 +97,8 @@ export const roster = createRoster([
     abilityClass: "read-only threat review",
     returnCard: "threat verdict and cited controls",
     forbiddenActions: ["implement product", "merge"],
+    nativeProfile: "review",
+    prompt: PROMPT_BILLY,
   },
   {
     displayName: "Jimmy",
@@ -69,6 +107,8 @@ export const roster = createRoster([
     abilityClass: "read-only discovery",
     returnCard: "grounded findings card",
     forbiddenActions: ["ratify alone", "edit product"],
+    nativeProfile: "review",
+    prompt: PROMPT_JIMMY,
   },
   {
     displayName: "Rosie",
@@ -77,6 +117,8 @@ export const roster = createRoster([
     abilityClass: "scoped docs write",
     returnCard: "docs evidence card",
     forbiddenActions: ["decide product behavior"],
+    nativeProfile: "execution",
+    prompt: PROMPT_ROSIE,
   },
   {
     displayName: "Frankie",
@@ -85,6 +127,8 @@ export const roster = createRoster([
     abilityClass: "read-only process/ledger audit",
     returnCard: "audit verdict",
     forbiddenActions: ["implement product", "merge"],
+    nativeProfile: "review",
+    prompt: PROMPT_FRANKIE,
   },
 ])
 
