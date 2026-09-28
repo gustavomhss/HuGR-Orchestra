@@ -67,7 +67,156 @@ disposition and #102 root evidence; freeze #112 installed boundary; #114
 durable records; #109 Own boundary; #108 context; #106 and #110; then #111
 gate. No product dispatch follows from this map.
 
-## Delivery DAG
+## Revised Ungrounded Execution Plan
+
+Status: proposed replacement for the blocked Atlas-first DAG below. This plan
+delivers one useful ungrounded governed slice before any Atlas-backed work. It
+does not claim that current transplanted code already satisfies this plan.
+
+### Cut
+
+Defer #94, #102, #107, #108, #109, #112, #196, #199, #200, #201, #202,
+#203, #204, and #205 from this slice. They remain independent blockers for
+grounded dispatch or release proof, not prerequisites for ungrounded governed
+dispatch. Do not build another Atlas provider, catalog, Own loader, CI adapter,
+or Project adapter while this authority path is incomplete.
+
+Keep only one lifecycle authority projection. Existing pure planning helpers
+(`#185`, #191, #195, #197, #198) remain evidence until a wave below has a
+runtime consumer; they must not independently authorize a Task.
+
+### Wave 0: Dispatch Freeze
+
+Owner: #206 lead only. Before any implementation dispatch, publish one
+conflict-map row for every Wave 1-3 WP with base SHA, exact owner/shared files,
+single integration owner, consumer interface anchor, dependencies, pairwise
+verdict, commands, mutation probe, and merge order. An absent field is HOLD.
+
+This wave also freezes the ungrounded context shape: capability state is
+`ABSENT`, direct stakeholder evidence plus current inspection SHA define scope,
+and the ContextRecord has no Atlas address, catalog, snapshot, Own skill, or
+ownership field. A trusted capability reader emits the `ABSENT` receipt; a
+trusted inspection reader emits SHA-bound path/symbol evidence; durable direct
+user message identity and exact anchor bind stakeholder evidence. Each receipt
+has immutable identity, producer/version, project/session binding where
+applicable, and content hash. Tests must prove that this shape reaches
+eligibility while any Atlas field, forged producer, receipt, SHA, or source
+holds.
+
+### Wave 1: Authority Core
+
+Owners: #206 lead normalization and #114 durable records.
+
+1. Freeze one EventV2 family for immutable revision, validation, ungrounded
+   context, approval decision, and eligibility projection.
+2. Make one serialized projection writer the only source of
+   `ELIGIBLE_FOR_EXECUTION` and `SUPERSEDED_FOR_EXECUTION`.
+3. Bind every record to project, session, revision, validation, context,
+   policy, and current-evidence hashes.
+4. Reject missing, stale, cross-session, cross-project, duplicate-conflict,
+   and model-authored authority before any Task admission.
+5. Define one immutable solo `DispatchBinding` with mode `solo-v1`, actor ID
+   `maestro`, and child agent ID `maestro`. It contains no work-card, grant,
+   roster, or reviewer field; these are forbidden until the future team
+   boundary replaces this binding. Every other actor, child agent, or mode is
+   `HOLD` before reservation.
+
+Exit: durable replay yields one deterministic current authority state; no
+parallel reader, fold, prompt, or legacy approval path can create execution
+eligibility.
+
+Required proof: same event replay is byte-identical; same ID with changed
+payload holds; stale context, policy, revision, or eligibility race supersedes
+before Task admission; missing/foreign evidence holds with named reason.
+
+### Wave 2: Direct User Flow
+
+Owners: #110 admission boundary and #106 durable readers/approval boundary.
+
+1. Admit eligible durable direct-user messages exactly once at the persisted
+   message boundary; synthetic, assistant, tool, stale, and duplicate messages
+   do not admit work.
+2. Read only Wave 1 revision, validation, and ungrounded context records.
+   Remove model-supplied plan and validation authority from approval inputs.
+3. Render exact evidence, classify direct reply, then atomically append
+   approval decision plus current eligibility projection.
+4. Context, policy, validation, or revision change supersedes old eligibility;
+   only a new visible presentation and direct reply can restore it.
+5. Invoke the Wave 1 sole projection writer through its one serialized
+   interface to append decision plus eligibility; Wave 2 does not own another
+   EventV2 append path. Bind current eligibility to the solo `DispatchBinding`
+   actor and child agent IDs, both `maestro`; no seat routing, grant expansion,
+   work card, or review receipt is simulated here.
+
+Exit: one direct user request reaches an exact Maestro-only eligibility
+projection without Atlas, GitHub, Relay, model tool choreography, or a fake
+team runtime.
+
+Required proof: direct user request admits once; synthetic/assistant/tool and
+duplicate delivery do not; stale revision/context/policy, forged record, and
+changed reply binding hold; `ABSENT` Atlas path reaches eligibility without an
+Atlas field; an alternate EventV2 append attempt cannot create eligibility.
+
+### Wave 3: Governed Dispatch
+
+Owners: #181 Task-resume proof, #111, and only #113 children required by its
+Task boundary.
+
+1. Prove native Task resume continues exact child context with exact child ID,
+   parent, and agent before any continuation claim. Missing/mismatched child
+   is `HOLD`; no replacement child.
+2. Task admission reads only current eligibility, not historical approval
+   events, `recordApproval`, `verifyGovernedTask`, or model parameters. Remove
+   or fail-close every legacy authority reader before enabling this path.
+3. Serialize eligibility verification, deterministic child reservation, child
+   creation/resume, and consume receipt. Retry before creation reuses one
+   reservation; retry after creation resumes only its bound child.
+4. Require exact child `task_id` for continuation and reject foreign parent,
+   agent, permission snapshot, project, session, or binding.
+5. Prove duplicate tool delivery never creates a second child, prompt, or
+   provider turn.
+6. Enforce `DispatchBinding.actorID = maestro` at reservation, child creation,
+   resume, and prompt, and enforce `childAgentID = maestro` before resolving
+   `subagent_type`. Any non-Maestro actor, agent, or subagent type holds before
+   child creation.
+
+Exit: ungrounded Maestro-only Task dispatch is exactly-once, recoverable, and
+fail-closed. Only then may grounded Atlas work or team implementation receive
+separate boundary decisions.
+
+Required proof: duplicate delivery, concurrent admission, post-reservation
+crash, child-before-receipt recovery, stale eligibility race, foreign child,
+and non-Maestro dispatch each produce one named HOLD/denial and never a second
+child or provider turn. Native-path proof passes an exact child ID and checks
+parent, agent, permission snapshot, and prior-context visibility; a missing or
+mismatched governed ID holds without creating a child.
+
+### Future Team Boundary
+
+#188, #189, and #190 are deliberately deferred. They replace the closed
+single-actor `DispatchBinding` allow-list with typed roster revision, route,
+grant, work-card, and independent-review receipts. They must not change Wave
+1-3 authority records or give a seat authority merely because it appears in
+Markdown. Their entry condition is a green Wave 3 Maestro-only flow.
+
+### Wave Rules
+
+- Each wave receives one conflict map, owner files, consumer interface,
+  commands, mutation probe, and cold review before dispatch.
+- Wave N+1 cannot implement around an unresolved Wave N authority seam.
+- Reuse OpenCode Task resume, EventV2 persistence, deterministic reservation,
+  and permission snapshots. Reimplement locally only these TechLead behavior
+  contracts: ordered fold, fail-safe verification, policy derivation, and cold
+  review. Never import TechLead runtime, config, shell, hooks, JSONL store,
+  MCP dynamic registration, or `master` assumptions.
+- A proposed or pure helper without a runtime consumer remains HOLD, not a
+  delivered authority feature.
+- Team is a future Maestro invariant, not Markdown decoration. The initial
+  runtime has one closed actor (`maestro`) and preserves an explicit dispatch
+  binding so typed team authority can replace the allow-list without changing
+  approval or Task identity semantics.
+
+## Historical Delivery DAG
 
 ```text
 CI root cause (#102) ------------> reliable current-base evidence

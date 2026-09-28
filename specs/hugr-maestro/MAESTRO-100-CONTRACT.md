@@ -239,6 +239,16 @@ Roster identity is `memberId`, not display name, model, Task ID, or prompt.
 Each seat receives only its current scope, allowed abilities, and return-card
 schema. The conductor consumes cards and receipts, not private reasoning.
 
+### Solo Bootstrap Profile
+
+Before the typed roster, route/grant matrix, and cold-review receipt boundary
+are implemented, the ungrounded bootstrap profile permits only one closed
+runtime actor: `maestro`. Waves 1 through 3 in `ROADMAP.md` use this profile.
+Its `DispatchBinding` fixes both actor and child agent to `maestro`; any other
+actor, agent, seat, work card, grant, or reviewer value is `HOLD`. This is not
+a partial team or authority shortcut. #188, #189, and #190 replace the profile
+with the roster above only after the Maestro-only flow is green.
+
 ## RelayRun
 
 A RelayRun is one bounded ordered chain for one compatible Runner, seat,
