@@ -12,6 +12,30 @@ orchestrates a fixed team, turns approved work into bounded Relay runs, keeps
 GitHub Project current, selects sufficient verification efficiently, integrates
 only proven work, and recovers honestly from failure.
 
+## Current Team-First Execution Profile
+
+`ROADMAP.md` "Revised Team-First Execution Plan" is the controlling execution
+profile for Waves 0 through 3 and supersedes conflicting lifecycle wording in
+this contract during those waves. It uses an immutable work card and one
+`ValidationRecord`; it does not introduce `PlanRevision`, a Maestro-owned
+`ContextRecord`, or a separate eligibility projection. Direct approval creates
+one `AuthorizationGranted` event bound to immutable card, roster, grant,
+review-policy, validation, and task-intent hashes. Task dispatch uses a narrow
+atomic reservation keyed by that authorization; this is not a general writer
+framework.
+
+Atlas owns context when Atlas is enabled: it issues a scoped, freshness-
+verifiable receipt and Maestro stores only its issuer, identity, and hash. The
+initial team-first path is Atlas-free. Team is runtime authority from Wave 1:
+typed roster, scoped grants, routed seat, and independent review replace any
+Markdown-only role claim.
+
+For Waves 0 through 3, later references in this document to `PlanRevision`,
+`ContextRecord`, `ELIGIBLE_FOR_EXECUTION`, RelayRun bindings, or Atlas snapshot
+fields are future-profile material only. They are non-executable: no packet,
+schema, reader, or Task fence may consume them until a later profile explicitly
+replaces the team-first profile.
+
 ## Definition of Done
 
 - A source-cited trace matrix maps every named Maestro surface to owner, state
@@ -238,16 +262,6 @@ specialist seats, matching V1 `TEAM` exactly.
 Roster identity is `memberId`, not display name, model, Task ID, or prompt.
 Each seat receives only its current scope, allowed abilities, and return-card
 schema. The conductor consumes cards and receipts, not private reasoning.
-
-### Solo Bootstrap Profile
-
-Before the typed roster, route/grant matrix, and cold-review receipt boundary
-are implemented, the ungrounded bootstrap profile permits only one closed
-runtime actor: `maestro`. Waves 1 through 3 in `ROADMAP.md` use this profile.
-Its `DispatchBinding` fixes both actor and child agent to `maestro`; any other
-actor, agent, seat, work card, grant, or reviewer value is `HOLD`. This is not
-a partial team or authority shortcut. #188, #189, and #190 replace the profile
-with the roster above only after the Maestro-only flow is green.
 
 ## RelayRun
 
@@ -476,6 +490,10 @@ file makes WPs sequential unless the lead creates one explicit integration WP.
    live architecture choice to resolve.
 
 ## First Execution Wave
+
+The #181 row below is superseded for execution sequencing by the current
+team-first profile: #181 is a Wave 0 native Task-resume prerequisite, not a
+later M1.1 implementation dispatch.
 
 | WP        | Owner                             | Status  | Reason                                                                  |
 | --------- | --------------------------------- | ------- | ----------------------------------------------------------------------- |
