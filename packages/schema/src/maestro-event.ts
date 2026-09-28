@@ -74,6 +74,75 @@ export namespace Approval {
     },
   })
   export type Consumed = typeof Consumed.Type
+
+  export const Reserved = Event.define({
+    type: "maestro.approval.reserved",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      presentationID: Schema.String,
+      approvalMessageID: Schema.String,
+      projectID: Schema.String,
+      memberID: Schema.String,
+      planRevisionID: Schema.String,
+      validationRecordID: Schema.String,
+      revisionHash: Schema.String,
+      validationHash: Schema.String,
+      contextHash: Schema.String,
+      policyHash: Schema.String,
+      taskHash: Schema.String,
+      callID: Schema.String,
+      childSessionID: Schema.String,
+      parentSessionID: Schema.String,
+      agent: Schema.String,
+    },
+  })
+  export type Reserved = typeof Reserved.Type
+
+  export const ReservedV2 = Event.define({
+    type: "maestro.approval.reserved",
+    durable: { version: 2, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      presentationID: Schema.String,
+      approvalMessageID: Schema.String,
+      projectID: Schema.String,
+      memberID: Schema.String,
+      planRevisionID: Schema.String,
+      validationRecordID: Schema.String,
+      revisionHash: Schema.String,
+      validationHash: Schema.String,
+      contextHash: Schema.String,
+      policyHash: Schema.String,
+      taskHash: Schema.String,
+      callID: Schema.String,
+      childSessionID: Schema.String,
+      parentSessionID: Schema.String,
+      agent: Schema.String,
+      permission: Schema.Array(
+        Schema.Struct({
+          permission: Schema.String,
+          pattern: Schema.String,
+          action: Schema.Literals(["allow", "deny", "ask"]),
+        }),
+      ),
+    },
+  })
+  export type ReservedV2 = typeof ReservedV2.Type
+
+  export const ConsumedV2 = Event.define({
+    type: "maestro.approval.consumed",
+    durable: { version: 2, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      presentationID: Schema.String,
+      approvalMessageID: Schema.String,
+      taskHash: Schema.String,
+      callID: Schema.String,
+      childSessionID: Schema.String,
+    },
+  })
+  export type ConsumedV2 = typeof ConsumedV2.Type
 }
 
 export namespace Admission {
@@ -113,4 +182,12 @@ export namespace Admission {
   export type Decided = typeof Decided.Type
 }
 
-export const Definitions = Event.inventory(Approval.Presented, Approval.Decided, Approval.Consumed, Admission.Decided)
+export const Definitions = Event.inventory(
+  Approval.Presented,
+  Approval.Decided,
+  Approval.Consumed,
+  Approval.Reserved,
+  Approval.ReservedV2,
+  Approval.ConsumedV2,
+  Admission.Decided,
+)

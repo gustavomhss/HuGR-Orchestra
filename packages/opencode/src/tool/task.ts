@@ -126,6 +126,9 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const runInBackground = params.background === true
+      let governedChildID: SessionID | undefined
+      let governedPresentationID: string | undefined
+      let governedCallID: string | undefined
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
@@ -138,6 +141,40 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
       const nextID = next.id ?? params.subagent_type
+      const childPermission = deriveSubagentSessionPermission({
+        parentSessionPermission: parent.permission ?? [],
+        subagent: next,
+      })
+      const childToolDenies = [
+        ...(next.permission.some((rule) => rule.permission === "todowrite")
+          ? []
+          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
+        ...(next.permission.some((rule) => rule.permission === id)
+          ? []
+          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
+        ...(cfg.experimental?.primary_tools?.map((permission) => ({
+          permission,
+          pattern: "*" as const,
+          action: "deny" as const,
+        })) ?? []),
+      ]
+      const childPermissions = [
+        ...childPermission,
+        ...childToolDenies.filter(
+          (deny) =>
+            !childPermission.some(
+              (rule) =>
+                rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
+            ),
+        ),
+      ]
+      let reservedChildPermissions:
+        | readonly {
+            readonly permission: string
+            readonly pattern: string
+            readonly action: "allow" | "deny" | "ask"
+          }[]
+        | undefined
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
@@ -212,7 +249,6 @@ export const TaskTool = Tool.define(
           subagentType: params.subagent_type,
           prompt: params.prompt,
           model: params.model,
-          taskID: params.task_id,
           ...governed,
         })
         if (governed.taskHash !== expectedTaskHash) {
@@ -257,8 +293,18 @@ export const TaskTool = Tool.define(
           return yield* Effect.fail(new Error(`Governed Task denied: ${verdict.reason}`))
         const approvedDecision = decisionEvents.find(
           (decision) =>
-            decision.approvalMessageID === governed.approvalMessageID && decision.taskHash === governed.taskHash,
-        )!
+            decision.outcome === "APPROVED" &&
+            decision.approvalMessageID === governed.approvalMessageID &&
+            decision.presentationID === newestPresentationID &&
+            decision.planRevisionID === governed.planRevisionID &&
+            decision.revisionHash === governed.revisionHash &&
+            decision.validationRecordID === governed.validationRecordID &&
+            decision.validationHash === governed.validationHash &&
+            decision.contextHash === governed.contextHash &&
+            decision.policyHash === governed.policyHash &&
+            decision.taskHash === governed.taskHash,
+        )
+        if (!approvedDecision) return yield* Effect.fail(new Error("Governed Task denied: approved-decision-missing"))
         const consumed = yield* database.db
           .select({ data: EventTable.data })
           .from(EventTable)
@@ -278,36 +324,138 @@ export const TaskTool = Tool.define(
         ) {
           return yield* Effect.fail(new Error("Governed Task denied: approval-consumed"))
         }
+        const reservationHash = createHash("sha256")
+          .update([governed.sessionID, approvedDecision.presentationID, governed.taskHash].join("\u0000"))
+          .digest("hex")
+        const reservationID = EventV2.ID.make(`evt_maestro_approval_reserved_${reservationHash}`)
+        const childSessionID = SessionID.make(`ses_maestro_approval_${reservationHash}`)
+        if (params.task_id && params.task_id !== childSessionID) {
+          return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
+        }
+        const reservation = {
+          sessionID: governed.sessionID,
+          presentationID: approvedDecision.presentationID,
+          approvalMessageID: governed.approvalMessageID,
+          projectID: governed.projectID,
+          memberID: governed.memberID,
+          planRevisionID: governed.planRevisionID,
+          validationRecordID: governed.validationRecordID,
+          revisionHash: governed.revisionHash,
+          validationHash: governed.validationHash,
+          contextHash: governed.contextHash,
+          policyHash: governed.policyHash,
+          taskHash: governed.taskHash,
+          callID,
+          childSessionID,
+          parentSessionID: ctx.sessionID,
+          agent: nextID,
+          permission: childPermissions,
+        }
+        const existingReservation = yield* database.db
+          .select({ data: EventTable.data, type: EventTable.type })
+          .from(EventTable)
+          .where(eq(EventTable.id, reservationID))
+          .get()
+          .pipe(Effect.orDie)
+        if (existingReservation) {
+          if (existingReservation.type !== EventV2.versionedType(MaestroEvent.Approval.ReservedV2.type, 2)) {
+            return yield* Effect.fail(new Error("Governed Task denied: reservation-missing-permission-snapshot"))
+          }
+          const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ReservedV2.data)(existingReservation.data)
+          if (
+            existing.sessionID !== reservation.sessionID ||
+            existing.presentationID !== reservation.presentationID ||
+            existing.approvalMessageID !== reservation.approvalMessageID ||
+            existing.projectID !== reservation.projectID ||
+            existing.memberID !== reservation.memberID ||
+            existing.planRevisionID !== reservation.planRevisionID ||
+            existing.validationRecordID !== reservation.validationRecordID ||
+            existing.revisionHash !== reservation.revisionHash ||
+            existing.validationHash !== reservation.validationHash ||
+            existing.contextHash !== reservation.contextHash ||
+            existing.policyHash !== reservation.policyHash ||
+            existing.taskHash !== reservation.taskHash ||
+            existing.callID !== reservation.callID ||
+            existing.childSessionID !== reservation.childSessionID ||
+            existing.parentSessionID !== reservation.parentSessionID ||
+            existing.agent !== reservation.agent
+          ) {
+            return yield* Effect.fail(new Error("Governed Task denied: reservation-binding-mismatch"))
+          }
+          reservedChildPermissions = existing.permission
+        } else {
+          yield* events.publish(MaestroEvent.Approval.ReservedV2, reservation, { id: reservationID }).pipe(
+            Effect.catchCause(() =>
+              database.db
+                .select({ data: EventTable.data, type: EventTable.type })
+                .from(EventTable)
+                .where(eq(EventTable.id, reservationID))
+                .get()
+                .pipe(
+                  Effect.orDie,
+                  Effect.flatMap((event) => {
+                    if (!event) return Effect.fail(new Error("Governed Task denied: reservation-hold"))
+                    if (event.type !== EventV2.versionedType(MaestroEvent.Approval.ReservedV2.type, 2)) {
+                      return Effect.fail(new Error("Governed Task denied: reservation-missing-permission-snapshot"))
+                    }
+                    const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ReservedV2.data)(event.data)
+                    if (
+                      existing.sessionID !== reservation.sessionID ||
+                      existing.presentationID !== reservation.presentationID ||
+                      existing.approvalMessageID !== reservation.approvalMessageID ||
+                      existing.projectID !== reservation.projectID ||
+                      existing.memberID !== reservation.memberID ||
+                      existing.planRevisionID !== reservation.planRevisionID ||
+                      existing.validationRecordID !== reservation.validationRecordID ||
+                      existing.revisionHash !== reservation.revisionHash ||
+                      existing.validationHash !== reservation.validationHash ||
+                      existing.contextHash !== reservation.contextHash ||
+                      existing.policyHash !== reservation.policyHash ||
+                      existing.taskHash !== reservation.taskHash ||
+                      existing.callID !== reservation.callID ||
+                      existing.childSessionID !== reservation.childSessionID ||
+                      existing.parentSessionID !== reservation.parentSessionID ||
+                      existing.agent !== reservation.agent
+                    ) {
+                      return Effect.fail(new Error("Governed Task denied: reservation-binding-mismatch"))
+                    }
+                    reservedChildPermissions = existing.permission
+                    return Effect.void
+                  }),
+                ),
+            ),
+          )
+          reservedChildPermissions = childPermissions
+        }
+        governedChildID = childSessionID
+        governedPresentationID = approvedDecision.presentationID
+        governedCallID = callID
         const consumeID = EventV2.ID.make(
           `evt_maestro_approval_consumed_${createHash("sha256")
             .update([governed.sessionID, approvedDecision.presentationID, governed.taskHash].join("\u0000"))
             .digest("hex")}`,
         )
-        yield* events
-          .publish(
-            MaestroEvent.Approval.Consumed,
-            {
-              sessionID: governed.sessionID,
-              presentationID: approvedDecision.presentationID,
-              approvalMessageID: governed.approvalMessageID,
-              taskHash: governed.taskHash,
-              callID,
-            },
-            { id: consumeID },
-          )
-          .pipe(
-            Effect.catchCause(() =>
-              database.db
-                .select({ id: EventTable.id })
-                .from(EventTable)
-                .where(eq(EventTable.id, consumeID))
-                .get()
-                .pipe(
-                  Effect.orDie,
-                  Effect.flatMap(() => Effect.fail(new Error("Governed Task denied: approval-consumed"))),
-                ),
-            ),
-          )
+        const existingReceipt = yield* database.db
+          .select({ data: EventTable.data })
+          .from(EventTable)
+          .where(eq(EventTable.id, consumeID))
+          .get()
+          .pipe(Effect.orDie)
+        if (existingReceipt) {
+          const receipt = Schema.decodeUnknownSync(MaestroEvent.Approval.ConsumedV2.data)(existingReceipt.data)
+          if (
+            receipt.sessionID !== governed.sessionID ||
+            receipt.presentationID !== approvedDecision.presentationID ||
+            receipt.approvalMessageID !== governed.approvalMessageID ||
+            receipt.taskHash !== governed.taskHash ||
+            receipt.callID !== callID ||
+            receipt.childSessionID !== childSessionID
+          ) {
+            return yield* Effect.fail(new Error("Governed Task denied: receipt-binding-mismatch"))
+          }
+          const child = yield* sessions.get(childSessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+          if (!child) return yield* Effect.fail(new Error("Governed Task denied: consumed-child-missing"))
+        }
       }
       let current = parent
       let depth = 0
@@ -371,41 +519,94 @@ export const TaskTool = Tool.define(
         })
       }
 
-      const session = resumed
-      const childPermission = deriveSubagentSessionPermission({
-        parentSessionPermission: parent.permission ?? [],
-        subagent: next,
-      })
-      const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
-        ...(cfg.experimental?.primary_tools?.map((permission) => ({
-          permission,
-          pattern: "*" as const,
-          action: "deny" as const,
-        })) ?? []),
-      ]
+      const reserved = governedChildID
+        ? yield* sessions.get(governedChildID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        : undefined
+      if (reserved && (reserved.parentID !== ctx.sessionID || reserved.agent !== nextID)) {
+        return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
+      }
+      const session = governedChildID ? reserved : resumed
+      const permissionSnapshot = reservedChildPermissions
+      if (
+        reserved &&
+        (!permissionSnapshot ||
+          reserved.permission?.length !== permissionSnapshot.length ||
+          reserved.permission?.some(
+            (rule, index) =>
+              rule.permission !== permissionSnapshot[index]?.permission ||
+              rule.pattern !== permissionSnapshot[index]?.pattern ||
+              rule.action !== permissionSnapshot[index]?.action,
+          ))
+      ) {
+        return yield* Effect.fail(new Error("Governed Task denied: reservation-child-permission-mismatch"))
+      }
       const nextSession =
         session ??
-        (yield* sessions.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
-          agent: nextID,
-          permission: [
-            ...childPermission,
-            ...childToolDenies.filter(
-              (deny) =>
-                !childPermission.some(
-                  (rule) =>
-                    rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
-                ),
-            ),
-          ],
-        }))
+        (yield* sessions
+          .create({
+            id: governedChildID,
+            parentID: ctx.sessionID,
+            title: params.description + ` (@${next.name} subagent)`,
+            agent: nextID,
+            permission: governedChildID ? permissionSnapshot : childPermissions,
+          })
+          .pipe(
+            Effect.catchCause(() => {
+              if (!governedChildID) return Effect.die("Task child creation failed")
+              return sessions
+                .get(governedChildID)
+                .pipe(Effect.catchCause(() => Effect.fail(new Error("Governed Task denied: reservation-child-hold"))))
+            }),
+          ))
+      if (governedChildID && (nextSession.parentID !== ctx.sessionID || nextSession.agent !== nextID)) {
+        return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
+      }
+
+      if (params.governed) {
+        const governed = params.governed
+        if (!governedPresentationID || !governedChildID || !governedCallID)
+          return yield* Effect.fail(new Error("Governed Task denied: reservation-hold"))
+        const consumeID = EventV2.ID.make(
+          `evt_maestro_approval_consumed_${createHash("sha256")
+            .update([governed.sessionID, governedPresentationID, governed.taskHash].join("\u0000"))
+            .digest("hex")}`,
+        )
+        const receipt = {
+          sessionID: governed.sessionID,
+          presentationID: governedPresentationID,
+          approvalMessageID: governed.approvalMessageID,
+          taskHash: governed.taskHash,
+          callID: governedCallID,
+          childSessionID: governedChildID,
+        }
+        yield* events.publish(MaestroEvent.Approval.ConsumedV2, receipt, { id: consumeID }).pipe(
+          Effect.catchCause(() =>
+            database.db
+              .select({ data: EventTable.data })
+              .from(EventTable)
+              .where(eq(EventTable.id, consumeID))
+              .get()
+              .pipe(
+                Effect.orDie,
+                Effect.flatMap((event) => {
+                  if (!event) return Effect.fail(new Error("Governed Task denied: receipt-hold"))
+                  const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ConsumedV2.data)(event.data)
+                  if (
+                    existing.sessionID !== receipt.sessionID ||
+                    existing.presentationID !== receipt.presentationID ||
+                    existing.approvalMessageID !== receipt.approvalMessageID ||
+                    existing.taskHash !== receipt.taskHash ||
+                    existing.callID !== receipt.callID ||
+                    existing.childSessionID !== receipt.childSessionID
+                  ) {
+                    return Effect.fail(new Error("Governed Task denied: receipt-binding-mismatch"))
+                  }
+                  return Effect.void
+                }),
+              ),
+          ),
+        )
+      }
 
       const metadata = {
         parentSessionId: ctx.sessionID,
