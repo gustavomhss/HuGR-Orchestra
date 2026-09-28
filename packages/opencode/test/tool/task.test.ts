@@ -24,6 +24,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -696,6 +697,50 @@ describe("tool.task", () => {
         },
       })
     }),
+  )
+
+  it.instance(
+    "native task permission denies survive bypass while custom callers remain unchanged",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const invoke = (caller: string) =>
+          def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: caller,
+              abort: new AbortController().signal,
+              extra: { bypassAgentCheck: true, promptOps: stubOps() },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+
+        for (const caller of ["Lucy", "Charlie"]) {
+          const exit = yield* invoke(caller).pipe(Effect.exit)
+          expect(Exit.isFailure(exit)).toBe(true)
+          if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.DeniedError)
+        }
+        yield* invoke("custom")
+      }),
+    {
+      config: {
+        agent: {
+          custom: {
+            mode: "subagent",
+          },
+        },
+      },
+    },
   )
 
   it.instance("execute cancels child session when abort signal fires", () =>
