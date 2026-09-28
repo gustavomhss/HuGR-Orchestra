@@ -8,7 +8,7 @@ import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
-import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
+import { GovernedTaskReservation } from "../maestro/governed-task-reservation"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
@@ -141,33 +141,11 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
       const nextID = next.id ?? params.subagent_type
-      const childPermission = deriveSubagentSessionPermission({
-        parentSessionPermission: parent.permission ?? [],
-        subagent: next,
+      const childPermissions = GovernedTaskReservation.childPermissions({
+        parent,
+        next,
+        primaryTools: cfg.experimental?.primary_tools,
       })
-      const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
-        ...(cfg.experimental?.primary_tools?.map((permission) => ({
-          permission,
-          pattern: "*" as const,
-          action: "deny" as const,
-        })) ?? []),
-      ]
-      const childPermissions = [
-        ...childPermission,
-        ...childToolDenies.filter(
-          (deny) =>
-            !childPermission.some(
-              (rule) =>
-                rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
-            ),
-        ),
-      ]
       let reservedChildPermissions:
         | readonly {
             readonly permission: string
@@ -566,46 +544,14 @@ export const TaskTool = Tool.define(
         const governed = params.governed
         if (!governedPresentationID || !governedChildID || !governedCallID)
           return yield* Effect.fail(new Error("Governed Task denied: reservation-hold"))
-        const consumeID = EventV2.ID.make(
-          `evt_maestro_approval_consumed_${createHash("sha256")
-            .update([governed.sessionID, governedPresentationID, governed.taskHash].join("\u0000"))
-            .digest("hex")}`,
-        )
-        const receipt = {
-          sessionID: governed.sessionID,
+        yield* GovernedTaskReservation.consume({
+          governed,
           presentationID: governedPresentationID,
-          approvalMessageID: governed.approvalMessageID,
-          taskHash: governed.taskHash,
-          callID: governedCallID,
           childSessionID: governedChildID,
-        }
-        yield* events.publish(MaestroEvent.Approval.ConsumedV2, receipt, { id: consumeID }).pipe(
-          Effect.catchCause(() =>
-            database.db
-              .select({ data: EventTable.data })
-              .from(EventTable)
-              .where(eq(EventTable.id, consumeID))
-              .get()
-              .pipe(
-                Effect.orDie,
-                Effect.flatMap((event) => {
-                  if (!event) return Effect.fail(new Error("Governed Task denied: receipt-hold"))
-                  const existing = Schema.decodeUnknownSync(MaestroEvent.Approval.ConsumedV2.data)(event.data)
-                  if (
-                    existing.sessionID !== receipt.sessionID ||
-                    existing.presentationID !== receipt.presentationID ||
-                    existing.approvalMessageID !== receipt.approvalMessageID ||
-                    existing.taskHash !== receipt.taskHash ||
-                    existing.callID !== receipt.callID ||
-                    existing.childSessionID !== receipt.childSessionID
-                  ) {
-                    return Effect.fail(new Error("Governed Task denied: receipt-binding-mismatch"))
-                  }
-                  return Effect.void
-                }),
-              ),
-          ),
-        )
+          callID: governedCallID,
+          database,
+          events,
+        })
       }
 
       const metadata = {
