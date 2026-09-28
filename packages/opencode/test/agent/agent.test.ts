@@ -15,7 +15,7 @@ import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
-import { nativeProfiles } from "../../src/maestro/roster"
+import { nativeProfiles, roster } from "../../src/maestro/roster"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -92,6 +92,15 @@ it.instance("registers native team specialists with fixed profiles", () =>
       expect(evalPerm(agent, "external_directory")).toBe("deny")
       expect(evalPerm(agent, "bash")).toBe(seat.profile === "execution" ? "allow" : "deny")
       expect(evalPerm(agent, "edit")).toBe(seat.profile === "execution" ? "allow" : "deny")
+    }
+  }),
+)
+
+it.instance("native team prompts use roster return cards", () =>
+  Effect.sync(() => {
+    for (const member of roster) {
+      if (!member.nativeProfile) continue
+      expect(member.prompt).toContain(`Return card: ${member.returnCard}`)
     }
   }),
 )
