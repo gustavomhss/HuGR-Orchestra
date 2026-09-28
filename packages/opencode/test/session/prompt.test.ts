@@ -59,6 +59,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { TaskTool } from "../../src/tool/task"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -554,6 +555,69 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+it.instance("TaskTool resumes native child history through SessionPrompt", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const parent = yield* seed(chat.id)
+    const tool = yield* TaskTool
+    const def = yield* tool.init()
+    const context = {
+      sessionID: chat.id,
+      messageID: parent.assistant.id,
+      agent: "build",
+      abort: new AbortController().signal,
+      extra: {
+        bypassAgentCheck: true,
+        promptOps: {
+          cancel: prompt.cancel,
+          resolvePromptParts: prompt.resolvePromptParts,
+          prompt: prompt.prompt,
+        },
+      },
+      messages: [],
+      metadata: () => Effect.void,
+      ask: () => Effect.void,
+    }
+
+    yield* llm.text("initial child reply")
+    const initial = yield* def.execute(
+      {
+        description: "inspect bug",
+        prompt: "initial child prompt",
+        subagent_type: "general",
+      },
+      context,
+    )
+    const child = yield* sessions.get(initial.metadata.sessionId)
+
+    yield* llm.text("resumed child reply")
+    const resumed = yield* def.execute(
+      {
+        description: "resume inspect",
+        prompt: "resumed child prompt",
+        subagent_type: "general",
+        task_id: child.id,
+      },
+      context,
+    )
+    const hits = yield* llm.hits
+    const request = JSON.stringify(hits.at(-1)?.body)
+
+    expect(request).toContain("initial child prompt")
+    expect(request).toContain("initial child reply")
+    expect(request).toContain("resumed child prompt")
+    expect(yield* sessions.children(chat.id)).toHaveLength(1)
+    expect(resumed.metadata.sessionId).toBe(child.id)
+  }),
+  15_000,
 )
 
 withMcpInstructions.instance(

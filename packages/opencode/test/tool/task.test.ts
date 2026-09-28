@@ -372,6 +372,15 @@ describe("tool.task", () => {
 
       expect(Exit.isFailure(parentExit)).toBe(true)
       expect(Exit.isFailure(agentExit)).toBe(true)
+      if (Exit.isSuccess(parentExit) || Exit.isSuccess(agentExit)) throw new Error("expected task resume denial")
+      const parentFailure = Cause.squash(parentExit.cause)
+      const agentFailure = Cause.squash(agentExit.cause)
+      expect(parentFailure).toBeInstanceOf(Error)
+      expect(agentFailure).toBeInstanceOf(Error)
+      if (!(parentFailure instanceof Error) || !(agentFailure instanceof Error))
+        throw new Error("expected task resume Error")
+      expect(parentFailure.message).toBe("Task resume denied: task is not direct child for selected agent")
+      expect(agentFailure.message).toBe("Task resume denied: task is not direct child for selected agent")
       expect(yield* sessions.children(chat.id)).toEqual([wrongAgent])
       expect(yield* sessions.children(otherParent.id)).toEqual([wrongParent])
     }),
