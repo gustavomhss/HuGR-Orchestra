@@ -3,7 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
-import { HARD_LIMIT_LOC, TARGET_LOC, countLoc, formatGodfileReport, runGodfileGate } from "../../../script/godfile"
+import {
+  EXCEPTION_LIMIT_LOC,
+  NORMAL_LIMIT_LOC,
+  TOLERANCE_LIMIT_LOC,
+  countLoc,
+  formatGodfileReport,
+  runGodfileGate,
+} from "../../../script/godfile"
 
 const repos: string[] = []
 
@@ -22,9 +29,9 @@ function repo() {
   git(cwd, "config", "user.email", "test@example.com")
   git(cwd, "config", "user.name", "Godfile Test")
   mkdirSync(join(cwd, "foundation/atlas"), { recursive: true })
-  writeFileSync(join(cwd, "legacy.ts"), lines(HARD_LIMIT_LOC + 1))
-  writeFileSync(join(cwd, "near.ts"), lines(TARGET_LOC + 1))
-  writeFileSync(join(cwd, "foundation/atlas/vendor.ts"), lines(HARD_LIMIT_LOC + 1))
+  writeFileSync(join(cwd, "exception.ts"), lines(NORMAL_LIMIT_LOC))
+  writeFileSync(join(cwd, "legacy.ts"), lines(EXCEPTION_LIMIT_LOC + 1))
+  writeFileSync(join(cwd, "foundation/atlas/vendor.ts"), lines(EXCEPTION_LIMIT_LOC + 1))
   git(cwd, "add", ".")
   git(cwd, "commit", "-m", "baseline")
   return cwd
@@ -39,101 +46,129 @@ describe("godfile", () => {
     expect(countLoc("one\n\n two\r\n  \nthree")).toBe(3)
   })
 
-  test("flags target files, tolerates unchanged legacy, excludes vendored Atlas", () => {
-    const report = runGodfileGate({ cwd: repo(), baseRef: "HEAD" })
+  test("warns at 401 through 600, including tolerance boundary", () => {
+    const cwd = repo()
+    writeFileSync(join(cwd, "target.ts"), lines(NORMAL_LIMIT_LOC + 1))
+    writeFileSync(join(cwd, "tolerance.ts"), lines(TOLERANCE_LIMIT_LOC))
+
+    const report = runGodfileGate({ cwd, baseRef: "HEAD" })
     expect(report.errors).toEqual([])
     expect(report.warnings).toEqual(
       expect.arrayContaining([
-        { file: "near.ts", lines: TARGET_LOC + 1, kind: "target" },
-        { file: "legacy.ts", lines: HARD_LIMIT_LOC + 1, baseLines: HARD_LIMIT_LOC + 1, kind: "legacy" },
+        { file: "target.ts", lines: NORMAL_LIMIT_LOC + 1, kind: "tolerance" },
+        { file: "tolerance.ts", lines: TOLERANCE_LIMIT_LOC, kind: "tolerance" },
       ]),
     )
+  })
+
+  test("tolerates unchanged legacy, excludes vendored Atlas", () => {
+    const report = runGodfileGate({ cwd: repo(), baseRef: "HEAD" })
+    expect(report.errors).toEqual([])
+    expect(report.warnings).toContainEqual({
+      file: "legacy.ts",
+      lines: EXCEPTION_LIMIT_LOC + 1,
+      baseLines: EXCEPTION_LIMIT_LOC + 1,
+      kind: "legacy",
+    })
     expect(report.warnings.some((finding) => finding.file.startsWith("foundation/atlas/"))).toBeFalse()
   })
 
-  test("fails when a legacy hard-limit file grows", () => {
+  test("fails when legacy file over 700 grows, regardless of waiver maximum", () => {
     const cwd = repo()
-    writeFileSync(join(cwd, "legacy.ts"), lines(HARD_LIMIT_LOC + 2))
+    writeFileSync(
+      join(cwd, "godfile-waivers.json"),
+      JSON.stringify({
+        waivers: {
+          "legacy.ts": {
+            maximumLines: EXCEPTION_LIMIT_LOC + 100,
+            reason: "Human-authorized architecture exception",
+            authorizedBy: "stakeholder",
+            authorizedAt: "2026-09-08",
+          },
+        },
+      }),
+    )
+    writeFileSync(join(cwd, "legacy.ts"), lines(EXCEPTION_LIMIT_LOC + 2))
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual(
       expect.arrayContaining([expect.stringContaining("legacy.ts")]),
     )
   })
 
-  test("fails a new hard-limit file", () => {
+  test("requires an exact waiver for 601 LOC", () => {
     const cwd = repo()
-    writeFileSync(join(cwd, "new.ts"), lines(HARD_LIMIT_LOC + 1))
+    writeFileSync(join(cwd, "new.ts"), lines(TOLERANCE_LIMIT_LOC + 1))
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual(
       expect.arrayContaining([expect.stringContaining("new.ts")]),
     )
   })
 
-  test("permits only named pre-existing files through an explicit fixed maximum", () => {
+  test("permits 601 through 700 only with valid exact waiver", () => {
     const cwd = repo()
     writeFileSync(
       join(cwd, "godfile-waivers.json"),
       JSON.stringify({
         waivers: {
-          "legacy.ts": {
-            maximumLines: HARD_LIMIT_LOC + 2,
-            reason: "Human-authorized legacy exception",
+          "exception.ts": {
+            maximumLines: EXCEPTION_LIMIT_LOC,
+            reason: "Human-authorized architecture exception",
             authorizedBy: "stakeholder",
             authorizedAt: "2026-09-08",
           },
         },
       }),
     )
-    writeFileSync(join(cwd, "legacy.ts"), lines(HARD_LIMIT_LOC + 2))
+    writeFileSync(join(cwd, "exception.ts"), lines(TOLERANCE_LIMIT_LOC + 1))
 
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual([])
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).warnings).toEqual(
       expect.arrayContaining([
         {
-          file: "legacy.ts",
-          lines: HARD_LIMIT_LOC + 2,
-          baseLines: HARD_LIMIT_LOC + 1,
-          kind: "waiver",
-          reason: "Human-authorized legacy exception",
+          file: "exception.ts",
+          lines: TOLERANCE_LIMIT_LOC + 1,
+          baseLines: NORMAL_LIMIT_LOC,
+          kind: "exception",
+          reason: "Human-authorized architecture exception",
         },
       ]),
     )
 
-    writeFileSync(join(cwd, "legacy.ts"), lines(HARD_LIMIT_LOC + 3))
+    writeFileSync(join(cwd, "exception.ts"), lines(EXCEPTION_LIMIT_LOC))
+    expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual([])
+
+    writeFileSync(join(cwd, "exception.ts"), lines(EXCEPTION_LIMIT_LOC + 1))
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual(
-      expect.arrayContaining([expect.stringContaining("approved waiver maximum")]),
+      expect.arrayContaining([expect.stringContaining("exception.ts")]),
+    )
+
+    writeFileSync(join(cwd, "new.ts"), lines(EXCEPTION_LIMIT_LOC + 1))
+    expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual(
+      expect.arrayContaining([expect.stringContaining("new.ts")]),
     )
   })
 
-  test("marks a valid waiver used when unchanged legacy handling accepts the file", () => {
+  test("skips only exact generated first-line marker", () => {
+    const cwd = repo()
+    writeFileSync(join(cwd, "generated.ts"), `// This file is auto-generated by @hey-api/openapi-ts\n${lines(EXCEPTION_LIMIT_LOC + 1)}`)
+    writeFileSync(join(cwd, "false.ts"), `// This file is auto-generated by @hey-api/openapi-tsx\n${lines(EXCEPTION_LIMIT_LOC + 1)}`)
+    writeFileSync(join(cwd, "later.ts"), `const source = true\n// This file is auto-generated by @hey-api/openapi-ts\n${lines(EXCEPTION_LIMIT_LOC + 1)}`)
+
+    const report = runGodfileGate({ cwd, baseRef: "HEAD" })
+    expect(report.errors).toEqual(expect.arrayContaining([expect.stringContaining("false.ts"), expect.stringContaining("later.ts")]))
+    expect(report.errors.some((error) => error.includes("generated.ts"))).toBeFalse()
+  })
+
+  test("fails a stale or malformed waiver ledger", () => {
     const cwd = repo()
     writeFileSync(
       join(cwd, "godfile-waivers.json"),
       JSON.stringify({
         waivers: {
-          "legacy.ts": {
-            maximumLines: HARD_LIMIT_LOC + 1,
-            reason: "Human-authorized legacy exception",
-            authorizedBy: "stakeholder",
-            authorizedAt: "2026-09-08",
-          },
+          "legacy.ts": { reason: "", authorizedBy: "stakeholder", authorizedAt: "2026-09-08" },
         },
       }),
     )
-
-    const report = runGodfileGate({ cwd, baseRef: "HEAD" })
-    expect(report.errors).toEqual([])
-    expect(report.warnings).toContainEqual({
-      file: "legacy.ts",
-      lines: HARD_LIMIT_LOC + 1,
-      baseLines: HARD_LIMIT_LOC + 1,
-      kind: "legacy",
-    })
-  })
-
-  test("fails a stale or malformed waiver ledger", () => {
-    const cwd = repo()
-    writeFileSync(join(cwd, "godfile-waivers.json"), JSON.stringify({ waivers: {} }))
     expect(runGodfileGate({ cwd, baseRef: "HEAD" }).errors).toEqual(
-      expect.arrayContaining([expect.stringContaining("expected non-empty waivers object")]),
+      expect.arrayContaining([expect.stringContaining("invalid waiver for legacy.ts")]),
     )
 
     writeFileSync(
@@ -141,7 +176,7 @@ describe("godfile", () => {
       JSON.stringify({
         waivers: {
           "near.ts": {
-            maximumLines: HARD_LIMIT_LOC + 1,
+            maximumLines: EXCEPTION_LIMIT_LOC,
             reason: "No longer needed",
             authorizedBy: "stakeholder",
             authorizedAt: "2026-09-08",
@@ -174,8 +209,8 @@ describe("godfile", () => {
   test("reports every warning and error with its file", () => {
     const output = formatGodfileReport({
       checked: 1,
-      warnings: [{ file: "near.ts", lines: TARGET_LOC + 1, kind: "target" }],
-      errors: ["new.ts: 751 LOC exceeds 750"],
+      warnings: [{ file: "near.ts", lines: NORMAL_LIMIT_LOC + 1, kind: "tolerance" }],
+      errors: ["new.ts: 701 LOC exceeds 700"],
     })
     expect(output).toContain("near.ts")
     expect(output).toContain("new.ts")
