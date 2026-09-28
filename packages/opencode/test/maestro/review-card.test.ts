@@ -119,6 +119,13 @@ describe("Maestro artifact review cards", () => {
     ).toEqual({ status: "HOLD", reason: "invalid-card" })
   })
 
+  test("holds nonenumerable DTO fields", () => {
+    const hidden = { ...card }
+    Object.defineProperty(hidden, "contract", { enumerable: false, value: card.contract })
+
+    expect(recordReviewCard(hidden)).toEqual({ status: "HOLD", reason: "invalid-card" })
+  })
+
   test("requires outcome evidence and exact artifact citations", () => {
     expect(recordReviewCard({ ...card, checks: [{ ...card.checks[0]!, outcome: "FAIL" }] })).toEqual({
       status: "HOLD",

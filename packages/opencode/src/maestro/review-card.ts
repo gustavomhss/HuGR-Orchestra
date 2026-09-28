@@ -98,7 +98,8 @@ function record(input: unknown, keys: readonly string[]): input is Record<string
         typeof key === "string" &&
         keys.includes(key) &&
         Object.hasOwn(descriptors, key) &&
-        Object.hasOwn(descriptors[key]!, "value"),
+        Object.hasOwn(descriptors[key]!, "value") &&
+        descriptors[key]!.enumerable,
     )
   )
 }
