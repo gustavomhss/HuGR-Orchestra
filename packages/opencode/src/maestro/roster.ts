@@ -3,6 +3,7 @@ export type RosterMember = {
   readonly memberId: string
   readonly role: string
   readonly abilityClass: string
+  readonly returnCard: string
   readonly forbiddenActions: readonly string[]
 }
 
@@ -18,6 +19,7 @@ export const roster = createRoster([
     memberId: "maestro",
     role: "conductor/integrator",
     abilityClass: "lifecycle, routing, reconcile, integration",
+    returnCard: "transition/Project/merge receipt",
     forbiddenActions: ["product implementation", "self-approval", "self-review"],
   },
   {
@@ -25,6 +27,7 @@ export const roster = createRoster([
     memberId: "charlie",
     role: "backend execution",
     abilityClass: "scoped repository write",
+    returnCard: "implementation card, gates, diff receipt",
     forbiddenActions: ["approve", "review own work", "merge"],
   },
   {
@@ -32,6 +35,7 @@ export const roster = createRoster([
     memberId: "patty",
     role: "frontend execution",
     abilityClass: "scoped repository write",
+    returnCard: "implementation card, sensory evidence, diff receipt",
     forbiddenActions: ["approve", "review own work", "merge"],
   },
   {
@@ -39,6 +43,7 @@ export const roster = createRoster([
     memberId: "lucy",
     role: "cold review",
     abilityClass: "read-only artifact review",
+    returnCard: "cited APPROVE/FIX_FIRST/REJECT card",
     forbiddenActions: ["edit implementation", "receive author transcript", "merge"],
   },
   {
@@ -46,6 +51,7 @@ export const roster = createRoster([
     memberId: "bobby",
     role: "architecture",
     abilityClass: "read-only contract review",
+    returnCard: "seam/contract verdict",
     forbiddenActions: ["implement product", "merge"],
   },
   {
@@ -53,6 +59,7 @@ export const roster = createRoster([
     memberId: "billy",
     role: "security",
     abilityClass: "read-only threat review",
+    returnCard: "threat verdict and cited controls",
     forbiddenActions: ["implement product", "merge"],
   },
   {
@@ -60,6 +67,7 @@ export const roster = createRoster([
     memberId: "jimmy",
     role: "exploration",
     abilityClass: "read-only discovery",
+    returnCard: "grounded findings card",
     forbiddenActions: ["ratify alone", "edit product"],
   },
   {
@@ -67,6 +75,7 @@ export const roster = createRoster([
     memberId: "rosie",
     role: "documentation",
     abilityClass: "scoped docs write",
+    returnCard: "docs evidence card",
     forbiddenActions: ["decide product behavior"],
   },
   {
@@ -74,6 +83,7 @@ export const roster = createRoster([
     memberId: "frankie",
     role: "process audit",
     abilityClass: "read-only process/ledger audit",
+    returnCard: "audit verdict",
     forbiddenActions: ["implement product", "merge"],
   },
 ])

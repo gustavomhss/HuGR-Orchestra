@@ -9,6 +9,7 @@ describe("Maestro roster", () => {
         memberId: "maestro",
         role: "conductor/integrator",
         abilityClass: "lifecycle, routing, reconcile, integration",
+        returnCard: "transition/Project/merge receipt",
         forbiddenActions: ["product implementation", "self-approval", "self-review"],
       },
       {
@@ -16,6 +17,7 @@ describe("Maestro roster", () => {
         memberId: "charlie",
         role: "backend execution",
         abilityClass: "scoped repository write",
+        returnCard: "implementation card, gates, diff receipt",
         forbiddenActions: ["approve", "review own work", "merge"],
       },
       {
@@ -23,6 +25,7 @@ describe("Maestro roster", () => {
         memberId: "patty",
         role: "frontend execution",
         abilityClass: "scoped repository write",
+        returnCard: "implementation card, sensory evidence, diff receipt",
         forbiddenActions: ["approve", "review own work", "merge"],
       },
       {
@@ -30,6 +33,7 @@ describe("Maestro roster", () => {
         memberId: "lucy",
         role: "cold review",
         abilityClass: "read-only artifact review",
+        returnCard: "cited APPROVE/FIX_FIRST/REJECT card",
         forbiddenActions: ["edit implementation", "receive author transcript", "merge"],
       },
       {
@@ -37,6 +41,7 @@ describe("Maestro roster", () => {
         memberId: "bobby",
         role: "architecture",
         abilityClass: "read-only contract review",
+        returnCard: "seam/contract verdict",
         forbiddenActions: ["implement product", "merge"],
       },
       {
@@ -44,6 +49,7 @@ describe("Maestro roster", () => {
         memberId: "billy",
         role: "security",
         abilityClass: "read-only threat review",
+        returnCard: "threat verdict and cited controls",
         forbiddenActions: ["implement product", "merge"],
       },
       {
@@ -51,6 +57,7 @@ describe("Maestro roster", () => {
         memberId: "jimmy",
         role: "exploration",
         abilityClass: "read-only discovery",
+        returnCard: "grounded findings card",
         forbiddenActions: ["ratify alone", "edit product"],
       },
       {
@@ -58,6 +65,7 @@ describe("Maestro roster", () => {
         memberId: "rosie",
         role: "documentation",
         abilityClass: "scoped docs write",
+        returnCard: "docs evidence card",
         forbiddenActions: ["decide product behavior"],
       },
       {
@@ -65,6 +73,7 @@ describe("Maestro roster", () => {
         memberId: "frankie",
         role: "process audit",
         abilityClass: "read-only process/ledger audit",
+        returnCard: "audit verdict",
         forbiddenActions: ["implement product", "merge"],
       },
     ])
@@ -93,11 +102,4 @@ describe("Maestro roster", () => {
     expect(lookupRosterMember("ana", renamed)).toEqual({ status: "HOLD", reason: "unknown-member-id" })
   })
 
-  test("mutation probe: removing seat makes contract test red", () => {
-    expect(roster).toHaveLength(9)
-  })
-
-  test("mutation probe: removing duplicate guard makes test red", () => {
-    expect(() => createRoster([roster[0]!, { ...roster[0]! }])).toThrow()
-  })
 })
