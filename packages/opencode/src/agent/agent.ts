@@ -199,6 +199,15 @@ const layer = Layer.effect(
             mode: "primary",
             native: true,
           },
+          lucy: {
+            id: "lucy",
+            name: "lucy",
+            description: "Native Maestro review member.",
+            options: {},
+            permission: Permission.merge(defaults, user),
+            mode: "subagent",
+            native: true,
+          },
           general: {
             id: "general",
             name: "general",

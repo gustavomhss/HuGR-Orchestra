@@ -12,6 +12,7 @@ import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { MaestroPresentApprovalTool, MaestroRecordApprovalTool } from "./maestro-approval"
 import { MaestroRecordAdmissionTool } from "./maestro-admission"
+import { MaestroRecordReviewTool, MaestroRecordValidationTool } from "./maestro-validation"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -105,6 +106,8 @@ const layer = Layer.effect(
     const maestroPresentApproval = yield* MaestroPresentApprovalTool
     const maestroRecordApproval = yield* MaestroRecordApprovalTool
     const maestroRecordAdmission = yield* MaestroRecordAdmissionTool
+    const maestroRecordValidation = yield* MaestroRecordValidationTool
+    const maestroRecordReview = yield* MaestroRecordReviewTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -223,6 +226,8 @@ const layer = Layer.effect(
           maestroPresentApproval: Tool.init(maestroPresentApproval),
           maestroRecordApproval: Tool.init(maestroRecordApproval),
           maestroRecordAdmission: Tool.init(maestroRecordAdmission),
+          maestroRecordValidation: Tool.init(maestroRecordValidation),
+          maestroRecordReview: Tool.init(maestroRecordReview),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
@@ -249,6 +254,8 @@ const layer = Layer.effect(
             tool.maestroPresentApproval,
             tool.maestroRecordApproval,
             tool.maestroRecordAdmission,
+            tool.maestroRecordValidation,
+            tool.maestroRecordReview,
             tool.fetch,
             tool.todo,
             tool.search,
@@ -318,11 +325,13 @@ const layer = Layer.effect(
         if (
           (tool.id === MaestroPresentApprovalTool.id ||
             tool.id === MaestroRecordApprovalTool.id ||
-            tool.id === MaestroRecordAdmissionTool.id) &&
+            tool.id === MaestroRecordAdmissionTool.id ||
+            tool.id === MaestroRecordValidationTool.id) &&
           input.agent.id !== "maestro"
         ) {
           return false
         }
+        if (tool.id === MaestroRecordReviewTool.id && input.agent.id !== "lucy") return false
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }

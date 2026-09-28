@@ -17,6 +17,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { MaestroPresentApprovalTool } from "../../src/tool/maestro-approval"
+import { MaestroRecordReviewTool, MaestroRecordValidationTool } from "../../src/tool/maestro-validation"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -263,15 +264,23 @@ describe("Maestro governed lifecycle", () => {
       const registry = yield* ToolRegistry.Service
       const build = yield* agent.get("build")
       const maestro = yield* agent.get("maestro")
-      if (!build || !maestro) throw new Error("expected native agents")
+      const lucy = yield* agent.get("lucy")
+      if (!build || !maestro || !lucy) throw new Error("expected native agents")
       const buildTools = yield* registry.tools({ ...ref, agent: build })
       const maestroTools = yield* registry.tools({ ...ref, agent: maestro })
+      const lucyTools = yield* registry.tools({ ...ref, agent: lucy })
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_present_approval")
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_approval")
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_admission")
+      expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_validation")
+      expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_review")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_present_approval")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_approval")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_admission")
+      expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_validation")
+      expect(maestroTools.map((tool) => tool.id)).not.toContain("maestro_record_review")
+      expect(lucyTools.map((tool) => tool.id)).toContain("maestro_record_review")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("maestro_record_validation")
     }),
   )
 
@@ -310,6 +319,59 @@ describe("Maestro governed lifecycle", () => {
         ),
       )
       expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.instance("enforces native Maestro and Lucy tool identities", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const validation = yield* MaestroRecordValidationTool
+      const review = yield* MaestroRecordReviewTool
+      const validationDef = yield* validation.init()
+      const reviewDef = yield* review.init()
+      const validationExit = yield* Effect.exit(
+        validationDef.execute(
+          {
+            workCardID: "card_01",
+            workCard: "Implement dark mode.",
+            routedMemberID: "general",
+            validatorVersion: "validate-plan-v1",
+            checks: [{ id: "scope", status: "PASS", detail: "Scoped." }],
+            outcome: "VALID",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      const reviewExit = yield* Effect.exit(
+        reviewDef.execute(
+          {
+            validationRecordID: "evt_missing",
+            workCard: "Implement dark mode.",
+            verdict: "APPROVE",
+            findings: [],
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "maestro",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+
+      expect(Exit.isFailure(validationExit)).toBe(true)
+      expect(Exit.isFailure(reviewExit)).toBe(true)
     }),
   )
 

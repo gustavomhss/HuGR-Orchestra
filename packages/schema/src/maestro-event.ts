@@ -2,7 +2,7 @@ export * as MaestroEvent from "./maestro-event"
 
 import { Event } from "./event"
 import { Schema } from "effect"
-import { NonNegativeInt } from "./schema"
+import { NonNegativeInt, PositiveInt } from "./schema"
 
 export namespace Approval {
   export const Presented = Event.define({
@@ -113,4 +113,62 @@ export namespace Admission {
   export type Decided = typeof Decided.Type
 }
 
-export const Definitions = Event.inventory(Approval.Presented, Approval.Decided, Approval.Consumed, Admission.Decided)
+export namespace Validation {
+  export const Recorded = Event.define({
+    type: "maestro.validation.recorded",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      workCardID: Schema.NonEmptyString,
+      workCard: Schema.NonEmptyString,
+      workCardHash: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      rosterHash: Schema.NonEmptyString,
+      grantHash: Schema.NonEmptyString,
+      reviewPolicyHash: Schema.NonEmptyString,
+      validatorID: Schema.NonEmptyString,
+      validatorVersion: Schema.NonEmptyString,
+      checks: Schema.Array(
+        Schema.Struct({
+          id: Schema.NonEmptyString,
+          status: Schema.Literals(["PASS", "FAIL", "HOLD"]),
+          detail: Schema.NonEmptyString,
+        }),
+      ).check(Schema.isMinLength(1)),
+      outcome: Schema.Literals(["VALID", "INVALID", "HOLD"]),
+    },
+  })
+  export type Recorded = typeof Recorded.Type
+}
+
+export namespace Review {
+  export const Received = Event.define({
+    type: "maestro.review.received",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      validationRecordID: Schema.NonEmptyString,
+      workCardHash: Schema.NonEmptyString,
+      reviewerID: Schema.Literal("lucy"),
+      verdict: Schema.Literals(["APPROVE", "FIX_FIRST", "REJECT"]),
+      findings: Schema.Array(
+        Schema.Struct({
+          path: Schema.NonEmptyString,
+          line: PositiveInt,
+          message: Schema.NonEmptyString,
+        }),
+      ),
+    },
+  })
+  export type Received = typeof Received.Type
+}
+
+export const Definitions = Event.inventory(
+  Approval.Presented,
+  Approval.Decided,
+  Approval.Consumed,
+  Admission.Decided,
+  Validation.Recorded,
+  Review.Received,
+)
