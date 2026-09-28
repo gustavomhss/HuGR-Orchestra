@@ -424,11 +424,26 @@ describe("Maestro governed lifecycle", () => {
     Effect.gen(function* () {
       const events = yield* EventV2Bridge.Service
       const { chat, assistant, sessions } = yield* seed()
+      const approvalMessage = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: chat.id,
+        agent: "maestro",
+        model: ref,
+        time: { created: Date.now() + 1 },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: approvalMessage.id,
+        sessionID: chat.id,
+        type: "text",
+        text: "aprovo",
+      })
       const governed = {
         sessionID: chat.id,
         projectID: chat.projectID,
         memberID: "maestro",
-        approvalMessageID: "msg_approve",
+        approvalMessageID: approvalMessage.id,
         planRevisionID: "plan_v1",
         revisionHash: "rev-hash",
         validationRecordID: "val_01",
@@ -468,6 +483,84 @@ describe("Maestro governed lifecycle", () => {
         validationLedger: "VALID",
         contextState: "CURRENT",
       })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const forgedDecisionID = EventV2.ID.make("evt_forged_approval_decision")
+      yield* events.publish(
+        MaestroEvent.Approval.Decided,
+        {
+          ...governed,
+          presentationID: "apr_01",
+          presentationMessageID: assistant.id,
+          methodVersion: "request-approval-v1",
+          outcome: "APPROVED",
+          decisionTime: Date.now(),
+        },
+        { id: forgedDecisionID },
+      )
+      const forged = yield* Effect.exit(
+        def.execute(
+          {
+            description: "implement dark mode",
+            prompt: "implement dark mode",
+            subagent_type: "general",
+            governed,
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            callID: "call_task_exact",
+            agent: "maestro",
+            abort: new AbortController().signal,
+            extra: { promptOps: stubOps() },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        ),
+      )
+      expect(Exit.isFailure(forged)).toBe(true)
+      expect(yield* sessions.children(chat.id)).toHaveLength(0)
+      const database = yield* Database.Service
+      yield* database.db.delete(EventTable).where(eq(EventTable.id, forgedDecisionID)).run().pipe(Effect.orDie)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: chat.id,
+        type: "tool",
+        tool: "maestro_present_approval",
+        callID: "call_present",
+        state: {
+          status: "completed",
+          input: {},
+          output: renderPresentation({
+            id: "apr_01",
+            sessionID: chat.id,
+            assistantMessageID: assistant.id,
+            planRevisionID: governed.planRevisionID,
+            validationRecordID: governed.validationRecordID,
+            actor: { projectId: governed.projectID, sessionId: chat.id, memberId: governed.memberID },
+            revisionHash: governed.revisionHash,
+            validationHash: governed.validationHash,
+            contextHash: governed.contextHash,
+            policyHash: governed.policyHash,
+            taskHash: governed.taskHash,
+            intent: { subagentType: "general", prompt: "implement dark mode" },
+            methodVersion: "request-approval-v1",
+            plan: "implement dark mode",
+            provenance: "test",
+            assumptions: [],
+            validationLedger: "VALID",
+            contextState: "CURRENT",
+          }),
+          title: "Maestro plan approval",
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      })
+      const direct = yield* recordApproval(chat.id)
+      if (direct.status === "HOLD") throw new Error(direct.reason)
+      expect(direct.status).toBe("APPROVED")
       yield* events.publish(MaestroEvent.Approval.Decided, {
         ...governed,
         planRevisionID: "plan_conflict",
@@ -477,17 +570,6 @@ describe("Maestro governed lifecycle", () => {
         outcome: "APPROVED",
         decisionTime: Date.now() - 1,
       })
-      yield* events.publish(MaestroEvent.Approval.Decided, {
-        ...governed,
-        presentationID: "apr_01",
-        presentationMessageID: "msg_presentation",
-        methodVersion: "request-approval-v1",
-        taskHash: governed.taskHash,
-        outcome: "APPROVED",
-        decisionTime: Date.now(),
-      })
-      const tool = yield* TaskTool
-      const def = yield* tool.init()
       const reservedChildID = `ses_maestro_approval_${createHash("sha256")
         .update([chat.id, "apr_01", governed.taskHash].join("\u0000"))
         .digest("hex")}`
@@ -519,7 +601,6 @@ describe("Maestro governed lifecycle", () => {
         ),
       )
       expect(Exit.isFailure(collisionExit)).toBe(true)
-      const database = yield* Database.Service
       const beforeRetry = yield* database.db
         .select({ data: EventTable.data })
         .from(EventTable)
