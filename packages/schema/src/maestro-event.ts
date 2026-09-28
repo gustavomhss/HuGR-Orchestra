@@ -302,6 +302,33 @@ export namespace Review {
   export type Received = typeof Received.Type
 }
 
+export namespace Authorization {
+  export const Granted = Event.define({
+    type: "maestro.authorization.granted",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      approvalMessageID: Schema.NonEmptyString,
+      validationRecordID: Schema.NonEmptyString,
+      workCardHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      routedMemberID: Schema.NonEmptyString,
+      rosterHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      grantHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      reviewPolicyHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      actor: Schema.Struct({
+        version: Schema.Literal("rfc8785-v1"),
+        bytes: Schema.NonEmptyString,
+        sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      }),
+      reviewerID: Schema.Literal("lucy"),
+      taskIntentHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      methodVersion: Schema.NonEmptyString,
+    },
+  })
+  export type Granted = typeof Granted.Type
+}
+
 export const Definitions = Event.inventory(
   Approval.Presented,
   Approval.Decided,
@@ -315,4 +342,5 @@ export const Definitions = Event.inventory(
   Held.Entered,
   Validation.Recorded,
   Review.Received,
+  Authorization.Granted,
 )

@@ -13,6 +13,7 @@ import { TaskTool } from "./task"
 import { MaestroPresentApprovalTool, MaestroRecordApprovalTool } from "./maestro-approval"
 import { MaestroRecordAdmissionTool } from "./maestro-admission"
 import { MaestroRecordReviewTool, MaestroRecordValidationTool } from "./maestro-validation"
+import { MaestroGrantAuthorizationTool } from "./maestro-authorization"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -109,6 +110,7 @@ const layer = Layer.effect(
     const maestroRecordAdmission = yield* MaestroRecordAdmissionTool
     const maestroRecordValidation = yield* MaestroRecordValidationTool
     const maestroRecordReview = yield* MaestroRecordReviewTool
+    const maestroGrantAuthorization = yield* MaestroGrantAuthorizationTool
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
@@ -229,6 +231,7 @@ const layer = Layer.effect(
           maestroRecordAdmission: Tool.init(maestroRecordAdmission),
           maestroRecordValidation: Tool.init(maestroRecordValidation),
           maestroRecordReview: Tool.init(maestroRecordReview),
+          maestroGrantAuthorization: Tool.init(maestroGrantAuthorization),
           fetch: Tool.init(webfetch),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
@@ -257,6 +260,7 @@ const layer = Layer.effect(
             tool.maestroRecordAdmission,
             tool.maestroRecordValidation,
             tool.maestroRecordReview,
+            tool.maestroGrantAuthorization,
             tool.fetch,
             tool.todo,
             tool.search,
@@ -330,7 +334,8 @@ const layer = Layer.effect(
             tool.id === MaestroRecordValidationTool.id) &&
           input.agent.id !== "maestro"
           ) ||
-          (tool.id === MaestroRecordReviewTool.id && input.agent.id !== "lucy")
+          (tool.id === MaestroRecordReviewTool.id && input.agent.id !== "lucy") ||
+          (tool.id === MaestroGrantAuthorizationTool.id && input.agent.id !== "maestro")
         ) {
           return false
         }
