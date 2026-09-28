@@ -27,6 +27,14 @@ export function createAbilityRegistry(descriptors: readonly AbilityDescriptor[])
     if (ids.has(descriptor.id)) throw new Error(`Ability descriptor id must be unique: ${descriptor.id}`)
     if (descriptor.allowedSeats.length === 0)
       throw new Error(`Ability descriptor allowedSeats must be nonempty: ${descriptor.id}`)
+    if (!allText(descriptor.requiredConfig)) {
+      throw new Error(`Ability descriptor requiredConfig entries must be nonempty: ${descriptor.id}`)
+    }
+    if (!allText(descriptor.allowedSeats)) {
+      throw new Error(`Ability descriptor allowedSeats entries must be nonempty: ${descriptor.id}`)
+    }
+    if (!allText(descriptor.tools))
+      throw new Error(`Ability descriptor tools entries must be nonempty: ${descriptor.id}`)
     if (hasDuplicate(descriptor.requiredConfig)) {
       throw new Error(`Ability descriptor requiredConfig must not contain duplicates: ${descriptor.id}`)
     }
@@ -70,8 +78,12 @@ export function availableAbilities(
   })
 }
 
-function text(value: string) {
-  return value.trim().length > 0
+function text(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function allText(values: readonly string[]) {
+  return values.every(text)
 }
 
 function hasDuplicate(values: readonly string[]) {

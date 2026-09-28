@@ -75,6 +75,9 @@ describe("Maestro ability registry", () => {
     invalid({ ...descriptors[0], id: "" })
     invalid({ ...descriptors[0], summary: " " })
     invalid({ ...descriptors[0], allowedSeats: [] })
+    invalid({ ...descriptors[0], requiredConfig: [" "] })
+    invalid({ ...descriptors[0], allowedSeats: [" "] })
+    invalid({ ...descriptors[0], tools: [" "] })
     invalid({ ...descriptors[0], requiredConfig: ["build.enabled", "build.enabled"] })
     invalid({ ...descriptors[0], allowedSeats: ["builder", "builder"] })
     invalid({ ...descriptors[0], tools: ["shell", "shell"] })
@@ -89,5 +92,9 @@ describe("Maestro ability registry", () => {
         availableDependencies: ["shell"],
       })[0],
     ).toEqual({ id: "build", summary: "Build project artifacts.", available: false, reason: "seat-not-allowed" })
+  })
+
+  test("mutation probe: removing blank-entry guard makes test red", () => {
+    expect(() => createAbilityRegistry([{ ...descriptors[0], tools: [" "] }])).toThrow()
   })
 })
