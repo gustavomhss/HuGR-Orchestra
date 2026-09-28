@@ -134,6 +134,21 @@ describe("Maestro artifact review cards", () => {
         first.card,
       ]),
     ).toEqual(first)
+    expect(
+      recordReviewCard(
+        {
+          findings: input.findings.map((finding) => ({ detail: finding.detail, citation: finding.citation })),
+          outcome: input.outcome,
+          checks: input.checks.map((check) => ({ evidence: check.evidence, outcome: check.outcome, name: check.name })),
+          diff: input.diff,
+          contract: input.contract,
+          reviewerId: input.reviewerId,
+          authorId: input.authorId,
+          id: input.id,
+        },
+        [first.card],
+      ),
+    ).toEqual(first)
     expect(recordReviewCard({ ...input, diff: "different diff" }, [first.card])).toEqual({
       status: "HOLD",
       reason: "review-id-collision",

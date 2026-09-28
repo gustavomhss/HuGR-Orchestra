@@ -44,7 +44,7 @@ export function recordReviewCard(input: unknown, records: readonly ReviewCard[] 
   const prior = records.filter((record) => record.id === input.id)
   if (prior.length === 0) return { status: "RECORDED", card: freezeCard(card) }
   const priorCard = prior.length === 1 ? canonicalCard(prior[0]!) : undefined
-  if (priorCard && JSON.stringify(priorCard) === JSON.stringify(card)) {
+  if (priorCard && canonicalJSON(priorCard) === canonicalJSON(card)) {
     return { status: "RECORDED", card: freezeCard(priorCard) }
   }
   return { status: "HOLD", reason: "review-id-collision" }
@@ -110,6 +110,19 @@ function canonicalCard(card: ReviewCard): ReviewCard {
       (left, right) => left.citation.localeCompare(right.citation) || left.detail.localeCompare(right.detail),
     ),
   }
+}
+
+function canonicalJSON(input: unknown): string {
+  if (input === null || typeof input === "boolean" || typeof input === "number" || typeof input === "string") {
+    return JSON.stringify(input)
+  }
+  if (Array.isArray(input)) return `[${input.map(canonicalJSON).join(",")}]`
+  if (input === undefined || typeof input !== "object") throw new Error("Review card must contain JSON values")
+  const object = input as Record<string, unknown>
+  return `{${Object.keys(object)
+    .sort((left, right) => left.localeCompare(right))
+    .map((key) => `${JSON.stringify(key)}:${canonicalJSON(object[key])}`)
+    .join(",")}}`
 }
 
 function freezeCard(card: ReviewCard): ReviewCard {
