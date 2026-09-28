@@ -228,8 +228,10 @@ export const TaskTool = Tool.define(
       }
       if (params.governed) {
         const governed = params.governed
-        const caller = yield* agent.get(ctx.agent)
-        if (caller?.id !== "maestro") return yield* Effect.fail(new Error("Governed Task requires Maestro"))
+        const caller = yield* agent.get(ctx.agentID ?? ctx.agent)
+        if (caller?.id !== "maestro" || caller.native !== true) {
+          return yield* Effect.fail(new Error("Governed Task requires Maestro"))
+        }
         if (!ctx.callID) return yield* Effect.fail(new Error("Governed Task denied: missing-call-id"))
         const callID = ctx.callID
         if (governed.sessionID !== ctx.sessionID || governed.projectID !== parent.projectID) {

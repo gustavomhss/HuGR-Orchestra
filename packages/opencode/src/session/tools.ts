@@ -68,6 +68,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     callID: options.toolCallId,
     extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
     agent: input.agent.name,
+    agentID: input.agent.id,
     messages: input.messages,
     metadata: (val) =>
       input.processor.updateToolCall(options.toolCallId, (match) => {

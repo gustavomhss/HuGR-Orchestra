@@ -21,6 +21,7 @@ export const debugRead = (args: { params?: string; metaOnly?: boolean }): Effect
     messageID,
     callID: "read-bench",
     agent: "build",
+    agentID: "build",
     abort: new AbortController().signal,
     messages: [],
     metadata: (val) => Effect.void,

@@ -5,7 +5,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Effect, Exit, Schema } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -124,7 +124,7 @@ const seed = Effect.fn("MaestroLifecycleTest.seed")(function* () {
 
 describe("Maestro governed lifecycle", () => {
   it.instance(
-    "records intake, direct approval, then exact governed child Task",
+    "renamed native Maestro records intake, direct approval, then exact governed child Task",
     () =>
       Effect.gen(function* () {
         const { chat, user, assistant, sessions } = yield* seed()
@@ -220,7 +220,7 @@ describe("Maestro governed lifecycle", () => {
           role: "assistant",
           sessionID: chat.id,
           mode: "maestro",
-          agent: "maestro",
+          agent: "Conductor",
           cost: 0,
           path: { cwd: "/tmp", root: "/tmp" },
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -254,7 +254,8 @@ describe("Maestro governed lifecycle", () => {
           sessionID: chat.id,
           messageID: dispatchMessage.id,
           callID: "call_task_01",
-          agent: "maestro",
+          agent: "Conductor",
+          agentID: "maestro",
           abort: new AbortController().signal,
           extra: { promptOps: stubOps({ onPrompt: () => prompts++ }) },
           messages: [],
@@ -262,6 +263,9 @@ describe("Maestro governed lifecycle", () => {
           ask: () => Effect.void,
         }
         const first = yield* def.execute(input, context)
+        const spoofed = yield* Effect.exit(def.execute(input, { ...context, agentID: "spoofed-maestro" }))
+        expect(Exit.isFailure(spoofed)).toBe(true)
+        if (Exit.isFailure(spoofed)) expect(Cause.pretty(spoofed.cause)).toContain("Governed Task requires Maestro")
         const retry = yield* def.execute({ ...input, task_id: first.metadata.sessionId }, context)
         const children = yield* sessions.children(chat.id)
         expect(children).toHaveLength(1)
@@ -318,6 +322,7 @@ describe("Maestro governed lifecycle", () => {
         expect(prompts).toBe(3)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
       }),
+    { config: { agent: { maestro: { name: "Conductor" } } } },
     15_000,
   )
 
@@ -339,42 +344,85 @@ describe("Maestro governed lifecycle", () => {
     }),
   )
 
-  it.instance("refuses model-supplied validation until durable validation reader exists", () =>
-    Effect.gen(function* () {
-      const { chat, assistant } = yield* seed()
-      const tool = yield* MaestroPresentApprovalTool
-      const def = yield* tool.init()
-      const exit = yield* Effect.exit(
-        def.execute(
-          {
-            planRevisionID: "plan_v1",
-            validationRecordID: "val_v1",
-            revisionHash: "revision-hash",
-            validationHash: "validation-hash",
-            contextHash: "context-hash",
-            policyHash: "policy-hash",
-            intent: { subagentType: "general", prompt: "implement dark mode" },
-            methodVersion: "request-approval-v1",
-            plan: "implement dark mode",
-            provenance: "test",
-            assumptions: [],
-            validationLedger: "VALID",
-            contextState: "CURRENT",
-          },
-          {
-            sessionID: chat.id,
-            messageID: assistant.id,
-            callID: "call_present",
-            agent: "maestro",
-            abort: new AbortController().signal,
-            messages: [],
-            metadata: () => Effect.void,
-            ask: () => Effect.void,
-          },
-        ),
-      )
-      expect(Exit.isFailure(exit)).toBe(true)
-    }),
+  it.instance(
+    "uses stable Maestro identity for approval after config rename and denies spoofed identity",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const agents = yield* Agent.Service
+        expect((yield* agents.get("maestro")).name).toBe("Conductor")
+        const tool = yield* MaestroPresentApprovalTool
+        const def = yield* tool.init()
+        const exit = yield* Effect.exit(
+          def.execute(
+            {
+              planRevisionID: "plan_v1",
+              validationRecordID: "val_v1",
+              revisionHash: "revision-hash",
+              validationHash: "validation-hash",
+              contextHash: "context-hash",
+              policyHash: "policy-hash",
+              intent: { subagentType: "general", prompt: "implement dark mode" },
+              methodVersion: "request-approval-v1",
+              plan: "implement dark mode",
+              provenance: "test",
+              assumptions: [],
+              validationLedger: "VALID",
+              contextState: "CURRENT",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              callID: "call_present",
+              agent: "Conductor",
+              agentID: "maestro",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          ),
+        )
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.pretty(exit.cause)).toContain(
+            "Approval presentation unavailable: durable plan revision and validation readers are not implemented",
+          )
+        }
+        const spoofed = yield* Effect.exit(
+          def.execute(
+            {
+              planRevisionID: "plan_v1",
+              validationRecordID: "val_v1",
+              revisionHash: "revision-hash",
+              validationHash: "validation-hash",
+              contextHash: "context-hash",
+              policyHash: "policy-hash",
+              intent: { subagentType: "general", prompt: "implement dark mode" },
+              methodVersion: "request-approval-v1",
+              plan: "implement dark mode",
+              provenance: "test",
+              assumptions: [],
+              validationLedger: "VALID",
+              contextState: "CURRENT",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              callID: "call_present_spoofed",
+              agent: "Conductor",
+              agentID: "spoofed-maestro",
+              abort: new AbortController().signal,
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          ),
+        )
+        expect(Exit.isFailure(spoofed)).toBe(true)
+        if (Exit.isFailure(spoofed)) expect(Cause.pretty(spoofed.cause)).toContain("Approval presentation requires Maestro")
+      }),
+    { config: { agent: { maestro: { name: "Conductor" } } } },
   )
 
   it.instance("denies governed Task before child Session creation without exact approval", () =>

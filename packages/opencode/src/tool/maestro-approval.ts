@@ -36,8 +36,10 @@ export const MaestroPresentApprovalTool = Tool.define(
       parameters: PresentationParameters,
       execute: (_params: Schema.Schema.Type<typeof PresentationParameters>, ctx) =>
         Effect.gen(function* () {
-          const agent = yield* agents.get(ctx.agent)
-          if (agent?.id !== "maestro") return yield* Effect.fail(new Error("Approval presentation requires Maestro"))
+          const agent = yield* agents.get(ctx.agentID ?? ctx.agent)
+          if (agent?.id !== "maestro" || agent.native !== true) {
+            return yield* Effect.fail(new Error("Approval presentation requires Maestro"))
+          }
           return yield* Effect.fail(
             new Error(
               "Approval presentation unavailable: durable plan revision and validation readers are not implemented",
@@ -59,8 +61,10 @@ export const MaestroRecordApprovalTool = Tool.define(
       parameters: Schema.Struct({}),
       execute: (_: Record<string, never>, ctx) =>
         Effect.gen(function* () {
-          const agent = yield* agents.get(ctx.agent)
-          if (agent?.id !== "maestro") return yield* Effect.fail(new Error("Approval decision requires Maestro"))
+          const agent = yield* agents.get(ctx.agentID ?? ctx.agent)
+          if (agent?.id !== "maestro" || agent.native !== true) {
+            return yield* Effect.fail(new Error("Approval decision requires Maestro"))
+          }
           const result = yield* recordApproval(ctx.sessionID)
           switch (result.status) {
             case "APPROVED":

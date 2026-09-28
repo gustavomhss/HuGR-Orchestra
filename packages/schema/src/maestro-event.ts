@@ -2,7 +2,7 @@ export * as MaestroEvent from "./maestro-event"
 
 import { Event } from "./event"
 import { Schema } from "effect"
-import { NonNegativeInt } from "./schema"
+import { NonNegativeInt, PositiveInt } from "./schema"
 
 export namespace Approval {
   export const Presented = Event.define({
@@ -230,6 +230,78 @@ export namespace Held {
   export type Entered = typeof Entered.Type
 }
 
+export namespace Validation {
+  export const Recorded = Event.define({
+    type: "maestro.validation.recorded",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      workCardID: Schema.NonEmptyString,
+      workCard: Schema.NonEmptyString,
+      workCardHash: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      rosterHash: Schema.NonEmptyString,
+      grantHash: Schema.NonEmptyString,
+      reviewPolicyHash: Schema.NonEmptyString,
+      actor: Schema.Struct({
+        version: Schema.Literal("rfc8785-v1"),
+        bytes: Schema.NonEmptyString,
+        sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      }),
+      validatorID: Schema.Literal("maestro"),
+      validatorVersion: Schema.NonEmptyString,
+      checks: Schema.Array(
+        Schema.Struct({
+          id: Schema.NonEmptyString,
+          status: Schema.Literals(["PASS", "FAIL", "HOLD"]),
+          detail: Schema.NonEmptyString,
+        }),
+      ).check(Schema.isMinLength(1)),
+      outcome: Schema.Literals(["VALID", "INVALID", "HOLD"]),
+    },
+  })
+  export type Recorded = typeof Recorded.Type
+}
+
+export namespace Review {
+  export const Received = Event.define({
+    type: "maestro.review.received",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      validationRecordID: Schema.NonEmptyString,
+      workCardHash: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      rosterHash: Schema.NonEmptyString,
+      grantHash: Schema.NonEmptyString,
+      reviewPolicyHash: Schema.NonEmptyString,
+      actor: Schema.Struct({
+        version: Schema.Literal("rfc8785-v1"),
+        bytes: Schema.NonEmptyString,
+        sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      }),
+      reviewerID: Schema.Literal("lucy"),
+      reviewMethodVersion: Schema.NonEmptyString,
+      artifact: Schema.Struct({
+        workCardHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+        sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+        baseSHA: Schema.NonEmptyString,
+        headSHA: Schema.NonEmptyString,
+        worktree: Schema.NonEmptyString,
+        changedPaths: Schema.Array(Schema.NonEmptyString),
+        bytes: Schema.NonEmptyString,
+      }),
+      verdict: Schema.Literals(["APPROVE", "FIX_FIRST", "REJECT"]),
+      findings: Schema.Array(
+        Schema.Struct({ path: Schema.NonEmptyString, line: PositiveInt, message: Schema.NonEmptyString }),
+      ),
+    },
+  })
+  export type Received = typeof Received.Type
+}
+
 export const Definitions = Event.inventory(
   Approval.Presented,
   Approval.Decided,
@@ -241,4 +313,6 @@ export const Definitions = Event.inventory(
   Clarification.Decided,
   Scope.Decided,
   Held.Entered,
+  Validation.Recorded,
+  Review.Received,
 )
