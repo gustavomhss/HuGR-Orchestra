@@ -1,3 +1,5 @@
+import { lookupRosterMember } from "./roster"
+
 export type ReviewCheck = {
   name: string
   outcome: "PASS" | "FAIL"
@@ -28,26 +30,41 @@ export type ReviewCardResult =
     }
 
 export function recordReviewCard(input: unknown, records: readonly ReviewCard[] = []): ReviewCardResult {
-  if (hasTranscriptKey(input)) return { status: "HOLD", reason: "transcript-forbidden" }
+  if (hasAuthorTranscript(input)) return { status: "HOLD", reason: "transcript-forbidden" }
   if (!validCard(input)) return { status: "HOLD", reason: "invalid-card" }
-  if (input.reviewerId !== "lucy") return { status: "HOLD", reason: "reviewer-not-lucy" }
+  const author = lookupRosterMember(input.authorId)
+  if (author.status === "HOLD") return { status: "HOLD", reason: "invalid-card" }
+  const reviewer = lookupRosterMember(input.reviewerId)
+  if (reviewer.status === "HOLD" || reviewer.member.memberId !== "lucy") {
+    return { status: "HOLD", reason: "reviewer-not-lucy" }
+  }
   if (input.authorId === input.reviewerId) return { status: "HOLD", reason: "self-review" }
 
+  const card = canonicalCard(input)
   const prior = records.filter((record) => record.id === input.id)
-  if (prior.length === 0) return { status: "RECORDED", card: freezeCard(input) }
-  if (prior.length === 1 && JSON.stringify(prior[0]) === JSON.stringify(input)) {
+  if (prior.length === 0) return { status: "RECORDED", card: freezeCard(card) }
+  if (prior.length === 1 && JSON.stringify(prior[0]) === JSON.stringify(card)) {
     return { status: "RECORDED", card: prior[0]! }
   }
   return { status: "HOLD", reason: "review-id-collision" }
 }
 
 function validCard(input: unknown): input is ReviewCard {
-  if (!record(input, ["id", "authorId", "reviewerId", "contract", "diff", "checks", "outcome", "findings"])) return false
+  if (!record(input, ["id", "authorId", "reviewerId", "contract", "diff", "checks", "outcome", "findings"]))
+    return false
   if (![input.id, input.authorId, input.reviewerId, input.contract, input.diff].every(nonempty)) return false
   if (input.outcome !== "APPROVE" && input.outcome !== "FIX_FIRST" && input.outcome !== "REJECT") return false
-  if (!Array.isArray(input.checks) || input.checks.length === 0 || !input.checks.every(validCheck)) return false
-  if (!Array.isArray(input.findings) || input.findings.length === 0 || !input.findings.every(validFinding)) return false
-  return true
+  const checks = input.checks
+  if (!validChecks(checks)) return false
+  if (new Set(checks.map((check) => check.name)).size !== checks.length) return false
+  if (!Array.isArray(input.findings) || !input.findings.every((finding) => validFinding(finding, checks))) return false
+  if (input.outcome === "APPROVE")
+    return checks.every((check) => check.outcome === "PASS") && input.findings.length === 0
+  return checks.some((check) => check.outcome === "FAIL") || input.findings.length > 0
+}
+
+function validChecks(input: unknown): input is ReviewCheck[] {
+  return Array.isArray(input) && input.length > 0 && input.every(validCheck)
 }
 
 function validCheck(input: unknown): input is ReviewCheck {
@@ -59,8 +76,13 @@ function validCheck(input: unknown): input is ReviewCheck {
   )
 }
 
-function validFinding(input: unknown): input is ReviewFinding {
-  return record(input, ["citation", "detail"]) && citation(input.citation) && nonempty(input.detail)
+function validFinding(input: unknown, checks: readonly ReviewCheck[]): input is ReviewFinding {
+  return (
+    record(input, ["citation", "detail"]) &&
+    nonempty(input.detail) &&
+    typeof input.citation === "string" &&
+    new Set(["contract", "diff", ...checks.map((check) => `check:${check.name}`)]).has(input.citation)
+  )
 }
 
 function record(input: unknown, keys: readonly string[]): input is Record<string, unknown> {
@@ -73,14 +95,20 @@ function nonempty(input: unknown): input is string {
   return typeof input === "string" && input.trim().length > 0
 }
 
-function citation(input: unknown): input is string {
-  return typeof input === "string" && /^.+:\d+(?::\d+)?$/.test(input)
+function hasAuthorTranscript(input: unknown) {
+  return (
+    input !== null && typeof input === "object" && !Array.isArray(input) && Object.hasOwn(input, "authorTranscript")
+  )
 }
 
-function hasTranscriptKey(input: unknown): boolean {
-  if (input === null || typeof input !== "object") return false
-  if (Array.isArray(input)) return input.some(hasTranscriptKey)
-  return Object.entries(input).some(([key, value]) => key.toLocaleLowerCase("en-US").includes("transcript") || hasTranscriptKey(value))
+function canonicalCard(card: ReviewCard): ReviewCard {
+  return {
+    ...card,
+    checks: [...card.checks].sort((left, right) => left.name.localeCompare(right.name)),
+    findings: [...card.findings].sort(
+      (left, right) => left.citation.localeCompare(right.citation) || left.detail.localeCompare(right.detail),
+    ),
+  }
 }
 
 function freezeCard(card: ReviewCard): ReviewCard {
