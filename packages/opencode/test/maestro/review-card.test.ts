@@ -86,6 +86,14 @@ describe("Maestro artifact review cards", () => {
     })
   })
 
+  test("holds inherited review fields before schema validation", () => {
+    const inherited = Object.assign(Object.create({ authorTranscript: "private reasoning" }), card)
+    const nullPrototype = Object.assign(Object.create(null), card)
+
+    expect(recordReviewCard(inherited)).toEqual({ status: "HOLD", reason: "invalid-card" })
+    expect(recordReviewCard(nullPrototype)).toMatchObject({ status: "RECORDED" })
+  })
+
   test("requires outcome evidence and exact artifact citations", () => {
     expect(recordReviewCard({ ...card, checks: [{ ...card.checks[0]!, outcome: "FAIL" }] })).toEqual({
       status: "HOLD",

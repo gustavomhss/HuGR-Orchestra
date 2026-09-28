@@ -88,6 +88,7 @@ function validFinding(input: unknown, checks: readonly ReviewCheck[]): input is 
 
 function record(input: unknown, keys: readonly string[]): input is Record<string, unknown> {
   if (input === null || typeof input !== "object" || Array.isArray(input)) return false
+  if (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null) return false
   const inputKeys = Reflect.ownKeys(input)
   return inputKeys.length === keys.length && inputKeys.every((key) => typeof key === "string" && keys.includes(key))
 }
