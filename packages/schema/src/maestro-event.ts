@@ -329,6 +329,22 @@ export namespace Authorization {
   export type Granted = typeof Granted.Type
 }
 
+export namespace Dispatch {
+  export const Reserved = Event.define({
+    type: "maestro.dispatch.reserved",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      authorizationID: Schema.NonEmptyString,
+      childSessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      taskIntentHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+    },
+  })
+  export type Reserved = typeof Reserved.Type
+}
+
 export const Definitions = Event.inventory(
   Approval.Presented,
   Approval.Decided,
@@ -343,4 +359,5 @@ export const Definitions = Event.inventory(
   Validation.Recorded,
   Review.Received,
   Authorization.Granted,
+  Dispatch.Reserved,
 )

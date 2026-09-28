@@ -10,6 +10,7 @@ import { Session } from "@/session/session"
 import { MessageID, PartID } from "@/session/schema"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { grantAuthorization } from "../../src/maestro/authorization"
+import { reserveDispatch } from "../../src/maestro/dispatch"
 import { recordValidation } from "../../src/maestro/validation-record"
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -61,5 +62,7 @@ it.instance("requires direct user approval and independent Lucy approval", () =>
     yield* sessions.updatePart({ id: PartID.ascending(), sessionID: session.id, messageID: direct.id, type: "text", text: "approve" })
     const granted = yield* grantAuthorization({ sessionID: session.id, validationRecordID: validation.id, approvalMessageID: direct.id })
     expect(granted).toMatchObject({ sessionID: session.id, validationRecordID: validation.id, approvalMessageID: direct.id, reviewerID: "lucy" })
+    const reservation = yield* reserveDispatch({ sessionID: session.id, authorizationID: granted.id })
+    expect(reservation).toMatchObject({ sessionID: session.id, authorizationID: granted.id, routedMemberID: "charlie" })
   }),
 )
