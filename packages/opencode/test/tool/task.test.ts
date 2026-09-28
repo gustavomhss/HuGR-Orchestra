@@ -245,11 +245,49 @@ describe("tool.task", () => {
     },
   )
 
-  it.instance("execute resumes an existing task session from task_id", () =>
+  it.instance("execute resumes exact native task session from task_id", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const { chat, assistant } = yield* seed()
       const child = yield* sessions.create({ parentID: chat.id, title: "Existing child", agent: "general" })
+      const priorUser = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: child.id,
+        agent: "general",
+        model: ref,
+        time: { created: Date.now() },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: priorUser.id,
+        sessionID: child.id,
+        type: "text",
+        text: "prior task prompt",
+      })
+      const priorAssistant: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: priorUser.id,
+        sessionID: child.id,
+        mode: "general",
+        agent: "general",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      }
+      yield* sessions.updateMessage(priorAssistant)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: priorAssistant.id,
+        sessionID: child.id,
+        type: "text",
+        text: "prior task result",
+      })
+      const priorHistory = yield* sessions.messages({ sessionID: child.id })
       const tool = yield* TaskTool
       const def = yield* tool.init()
       let seen: SessionPrompt.PromptInput | undefined
@@ -277,10 +315,74 @@ describe("tool.task", () => {
       const kids = yield* sessions.children(chat.id)
       expect(kids).toHaveLength(1)
       expect(kids[0]?.id).toBe(child.id)
+      expect(kids[0]?.parentID).toBe(chat.id)
+      expect(kids[0]?.agent).toBe("general")
       expect(result.metadata.sessionId).toBe(child.id)
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
+      expect(seen?.agent).toBe("general")
+      expect(seen?.parts).toEqual([{ type: "text", text: "look into the cache key path" }])
       expect(seen?.variant).toBe("xhigh")
+      expect(yield* sessions.messages({ sessionID: child.id })).toEqual(priorHistory)
+    }),
+  )
+
+  it.instance("execute denies task_id with different parent or agent", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const otherParent = yield* sessions.create({ title: "Other parent" })
+      const wrongParent = yield* sessions.create({ parentID: otherParent.id, title: "Wrong parent", agent: "general" })
+      const wrongAgent = yield* sessions.create({ parentID: chat.id, title: "Wrong agent", agent: "explore" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "build",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps() },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+
+      const parentExit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: wrongParent.id,
+          },
+          context,
+        )
+        .pipe(Effect.exit)
+      const agentExit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+            task_id: wrongAgent.id,
+          },
+          context,
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(parentExit)).toBe(true)
+      expect(Exit.isFailure(agentExit)).toBe(true)
+      if (Exit.isSuccess(parentExit) || Exit.isSuccess(agentExit)) throw new Error("expected task resume denial")
+      const parentFailure = Cause.squash(parentExit.cause)
+      const agentFailure = Cause.squash(agentExit.cause)
+      expect(parentFailure).toBeInstanceOf(Error)
+      expect(agentFailure).toBeInstanceOf(Error)
+      if (!(parentFailure instanceof Error) || !(agentFailure instanceof Error))
+        throw new Error("expected task resume Error")
+      expect(parentFailure.message).toBe("Task resume denied: task is not direct child for selected agent")
+      expect(agentFailure.message).toBe("Task resume denied: task is not direct child for selected agent")
+      expect(yield* sessions.children(chat.id)).toEqual([wrongAgent])
+      expect(yield* sessions.children(otherParent.id)).toEqual([wrongParent])
     }),
   )
 
