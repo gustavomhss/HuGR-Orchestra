@@ -3,14 +3,14 @@ import { availableAbilities, createAbilityRegistry, type AbilityDescriptor } fro
 
 const descriptors: readonly AbilityDescriptor[] = [
   {
-    id: "build",
+    id: "atlas",
     summary: "Build project artifacts.",
     requiredConfig: ["build.enabled"],
     allowedSeats: ["builder"],
     tools: ["shell"],
   },
   {
-    id: "review",
+    id: "github",
     summary: "Review proposed changes.",
     requiredConfig: [],
     allowedSeats: ["reviewer"],
@@ -29,8 +29,8 @@ describe("Maestro ability registry", () => {
         availableDependencies: ["shell"],
       }),
     ).toEqual([
-      { id: "build", summary: "Build project artifacts.", available: true },
-      { id: "review", summary: "Review proposed changes.", available: false, reason: "seat-not-allowed" },
+      { id: "atlas", summary: "Build project artifacts.", available: true },
+      { id: "github", summary: "Review proposed changes.", available: false, reason: "seat-not-allowed" },
     ])
   })
 
@@ -43,7 +43,7 @@ describe("Maestro ability registry", () => {
         enabledConfig: ["build.enabled"],
         availableDependencies: ["shell"],
       })[0],
-    ).toEqual({ id: "build", summary: "Build project artifacts.", available: false, reason: "seat-not-allowed" })
+    ).toEqual({ id: "atlas", summary: "Build project artifacts.", available: false, reason: "seat-not-allowed" })
     expect(
       availableAbilities(registry, {
         seat: "builder",
@@ -51,7 +51,7 @@ describe("Maestro ability registry", () => {
         availableDependencies: ["shell"],
       })[0],
     ).toEqual({
-      id: "build",
+      id: "atlas",
       summary: "Build project artifacts.",
       available: false,
       reason: "missing-required-config",
@@ -63,7 +63,7 @@ describe("Maestro ability registry", () => {
         availableDependencies: [],
       })[0],
     ).toEqual({
-      id: "build",
+      id: "atlas",
       summary: "Build project artifacts.",
       available: false,
       reason: "missing-required-dependency",
@@ -84,6 +84,10 @@ describe("Maestro ability registry", () => {
     expect(() => createAbilityRegistry([descriptors[0], { ...descriptors[0] }])).toThrow()
   })
 
+  test("rejects unknown built-in ability id", () => {
+    expect(() => createAbilityRegistry([{ ...descriptors[0], id: "build" }])).toThrow()
+  })
+
   test("mutation probe: removing seat guard makes test red", () => {
     expect(
       availableAbilities(createAbilityRegistry(descriptors), {
@@ -91,10 +95,14 @@ describe("Maestro ability registry", () => {
         enabledConfig: ["build.enabled"],
         availableDependencies: ["shell"],
       })[0],
-    ).toEqual({ id: "build", summary: "Build project artifacts.", available: false, reason: "seat-not-allowed" })
+    ).toEqual({ id: "atlas", summary: "Build project artifacts.", available: false, reason: "seat-not-allowed" })
   })
 
   test("mutation probe: removing blank-entry guard makes test red", () => {
     expect(() => createAbilityRegistry([{ ...descriptors[0], tools: [" "] }])).toThrow()
+  })
+
+  test("mutation probe: removing built-in whitelist makes test red", () => {
+    expect(createAbilityRegistry([descriptors[0]]).abilities).toHaveLength(1)
   })
 })

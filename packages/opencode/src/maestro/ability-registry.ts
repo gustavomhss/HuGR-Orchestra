@@ -19,10 +19,13 @@ export type AbilityAvailability =
       reason: "seat-not-allowed" | "missing-required-config" | "missing-required-dependency"
     }
 
+const builtInAbilityIDs = new Set(["repository", "github", "tests", "ci", "relay", "atlas"])
+
 export function createAbilityRegistry(descriptors: readonly AbilityDescriptor[]): AbilityRegistry {
   const ids = new Set<string>()
   const abilities = descriptors.map((descriptor) => {
     if (!text(descriptor.id)) throw new Error("Ability descriptor id must be nonempty")
+    if (!builtInAbilityIDs.has(descriptor.id)) throw new Error(`Ability descriptor id is unknown: ${descriptor.id}`)
     if (!text(descriptor.summary)) throw new Error("Ability descriptor summary must be nonempty")
     if (ids.has(descriptor.id)) throw new Error(`Ability descriptor id must be unique: ${descriptor.id}`)
     if (descriptor.allowedSeats.length === 0)
