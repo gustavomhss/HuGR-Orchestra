@@ -119,6 +119,25 @@ describe("maestro.project-config", () => {
     })
   })
 
+  test("holds malformed unrelated census fields", () => {
+    for (const malformed of [
+      null,
+      1,
+      { id: "", name: "Extra", type: "ProjectV2Field" },
+      { id: "extra", name: "", type: "ProjectV2Field" },
+      { id: "extra", name: "Extra", type: "" },
+      { id: "extra", name: "Extra", type: "ProjectV2Field", options: null },
+      { id: "extra", name: "Extra", type: "ProjectV2Field", options: [null] },
+      { id: "extra", name: "Extra", type: "ProjectV2Field", options: [{ id: "", name: "Option" }] },
+      { id: "extra", name: "Extra", type: "ProjectV2Field", options: [{ id: "option", name: "" }] },
+    ]) {
+      expect(validateProjectConfig({ ...config, fields: [...config.fields, malformed] })).toEqual({
+        status: "HOLD",
+        reason: "invalid-config",
+      })
+    }
+  })
+
   test("holds missing and duplicate fields", () => {
     expect(validateProjectConfig({ ...config, fields: config.fields.slice(1) })).toEqual({
       status: "HOLD",

@@ -123,6 +123,7 @@ export function validateProjectConfig(input: unknown): ProjectConfigValidation {
   if (input.owner !== projectConfig.owner) return { status: "HOLD", reason: "project-owner-mismatch" }
   if (input.projectID !== projectConfig.projectID) return { status: "HOLD", reason: "project-id-mismatch" }
   if (input.projectNumber !== projectConfig.projectNumber) return { status: "HOLD", reason: "project-number-mismatch" }
+  if (!input.fields.every(isField)) return { status: "HOLD", reason: "invalid-config" }
   for (const expected of projectConfig.fields) {
     const matches = input.fields.filter(
       (field): field is ProjectConfigField => isField(field) && field.id === expected.id,
@@ -162,10 +163,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isField(value: unknown): value is ProjectConfigField {
   return (
-    isRecord(value) && typeof value.id === "string" && typeof value.name === "string" && typeof value.type === "string"
+    isRecord(value) &&
+    nonemptyString(value.id) &&
+    nonemptyString(value.name) &&
+    nonemptyString(value.type) &&
+    (!Object.hasOwn(value, "options") || (Array.isArray(value.options) && value.options.every(isOption)))
   )
 }
 
 function isOption(value: unknown): value is ProjectConfigOption {
-  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string"
+  return isRecord(value) && nonemptyString(value.id) && nonemptyString(value.name)
+}
+
+function nonemptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0
 }
