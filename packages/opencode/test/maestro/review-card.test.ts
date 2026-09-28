@@ -120,6 +120,11 @@ describe("Maestro artifact review cards", () => {
 
     expect(first.card.checks.map((check) => check.name)).toEqual(["alpha", "zebra"])
     expect(first.card.findings.map((finding) => finding.citation)).toEqual(["check:zebra", "diff"])
+    const storedReplay = recordReviewCard(
+      { ...input, checks: [...input.checks].reverse(), findings: [...input.findings].reverse() },
+      [input],
+    )
+    expect(storedReplay).toEqual(first)
     expect(
       recordReviewCard({ ...input, checks: [...input.checks].reverse(), findings: [...input.findings].reverse() }, [
         first.card,

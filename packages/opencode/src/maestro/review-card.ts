@@ -43,8 +43,9 @@ export function recordReviewCard(input: unknown, records: readonly ReviewCard[] 
   const card = canonicalCard(input)
   const prior = records.filter((record) => record.id === input.id)
   if (prior.length === 0) return { status: "RECORDED", card: freezeCard(card) }
-  if (prior.length === 1 && JSON.stringify(prior[0]) === JSON.stringify(card)) {
-    return { status: "RECORDED", card: prior[0]! }
+  const priorCard = prior.length === 1 ? canonicalCard(prior[0]!) : undefined
+  if (priorCard && JSON.stringify(priorCard) === JSON.stringify(card)) {
+    return { status: "RECORDED", card: freezeCard(priorCard) }
   }
   return { status: "HOLD", reason: "review-id-collision" }
 }
