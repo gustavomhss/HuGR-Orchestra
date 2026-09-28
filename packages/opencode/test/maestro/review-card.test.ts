@@ -94,6 +94,31 @@ describe("Maestro artifact review cards", () => {
     expect(recordReviewCard(nullPrototype)).toMatchObject({ status: "RECORDED" })
   })
 
+  test("holds throwing DTO accessors before field reads", () => {
+    const accessor = <T extends object>(input: T, key: string) => {
+      Object.defineProperty(input, key, {
+        enumerable: true,
+        get() {
+          throw new Error("must not read accessor")
+        },
+      })
+      return input
+    }
+
+    expect(recordReviewCard(accessor({ ...card }, "contract"))).toEqual({ status: "HOLD", reason: "invalid-card" })
+    expect(recordReviewCard({ ...card, checks: [accessor({ ...card.checks[0]! }, "evidence")] })).toEqual({
+      status: "HOLD",
+      reason: "invalid-card",
+    })
+    expect(
+      recordReviewCard({
+        ...card,
+        outcome: "FIX_FIRST",
+        findings: [accessor({ citation: "diff", detail: "Finding." }, "detail")],
+      }),
+    ).toEqual({ status: "HOLD", reason: "invalid-card" })
+  })
+
   test("requires outcome evidence and exact artifact citations", () => {
     expect(recordReviewCard({ ...card, checks: [{ ...card.checks[0]!, outcome: "FAIL" }] })).toEqual({
       status: "HOLD",
