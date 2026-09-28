@@ -53,6 +53,9 @@ export type Event =
   | EventMaestroApprovalConsumed
   | EventMaestroApprovalReserved
   | EventMaestroAdmissionDecided
+  | EventMaestroClarificationDecided
+  | EventMaestroScopeDecided
+  | EventMaestroHeldEntered
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -1316,6 +1319,42 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "maestro.clarification.decided"
+        properties: {
+          sessionID: string
+          projectID: string
+          mode: "maestro"
+          predecessorID: string
+          methodVersion: string
+          decision: string
+          question: string
+        }
+      }
+    | {
+        id: string
+        type: "maestro.scope.decided"
+        properties: {
+          sessionID: string
+          projectID: string
+          mode: "maestro"
+          predecessorID: string
+          methodVersion: string
+          scopeID: string
+        }
+      }
+    | {
+        id: string
+        type: "maestro.held.entered"
+        properties: {
+          sessionID: string
+          projectID: string
+          mode: "maestro"
+          predecessorID: string
+          reason: string
+        }
+      }
+    | {
+        id: string
         type: "message.part.delta"
         properties: {
           sessionID: string
@@ -1765,6 +1804,9 @@ export type GlobalEvent = {
     | SyncEventMaestroApprovalConsumed
     | SyncEventMaestroApprovalReserved
     | SyncEventMaestroAdmissionDecided
+    | SyncEventMaestroClarificationDecided
+    | SyncEventMaestroScopeDecided
+    | SyncEventMaestroHeldEntered
 }
 
 /**
@@ -3034,6 +3076,9 @@ export type V2Event =
   | MaestroApprovalConsumed
   | MaestroApprovalReserved
   | MaestroAdmissionDecided
+  | MaestroClarificationDecided
+  | MaestroScopeDecided
+  | MaestroHeldEntered
   | MessagePartDelta
   | SessionDiff
   | SessionError
@@ -4111,6 +4156,63 @@ export type SyncEventMaestroAdmissionDecided = {
         activeWorkEffect: "none" | "new-scope-or-revision"
         reason: string
       }
+    }
+  }
+}
+
+export type SyncEventMaestroClarificationDecided = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "maestro.clarification.decided.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      projectID: string
+      mode: "maestro"
+      predecessorID: string
+      methodVersion: string
+      decision: string
+      question: string
+    }
+  }
+}
+
+export type SyncEventMaestroScopeDecided = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "maestro.scope.decided.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      projectID: string
+      mode: "maestro"
+      predecessorID: string
+      methodVersion: string
+      scopeID: string
+    }
+  }
+}
+
+export type SyncEventMaestroHeldEntered = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "maestro.held.entered.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      sessionID: string
+      projectID: string
+      mode: "maestro"
+      predecessorID: string
+      reason: string
     }
   }
 }
@@ -5761,6 +5863,72 @@ export type MaestroAdmissionDecided = {
   }
 }
 
+export type MaestroClarificationDecided = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "maestro.clarification.decided"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    methodVersion: string
+    decision: string
+    question: string
+  }
+}
+
+export type MaestroScopeDecided = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "maestro.scope.decided"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    methodVersion: string
+    scopeID: string
+  }
+}
+
+export type MaestroHeldEntered = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "maestro.held.entered"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    reason: string
+  }
+}
+
 export type MessagePartDelta = {
   id: string
   metadata?: {
@@ -7234,6 +7402,45 @@ export type EventMaestroAdmissionDecided = {
       activeWorkEffect: "none" | "new-scope-or-revision"
       reason: string
     }
+  }
+}
+
+export type EventMaestroClarificationDecided = {
+  id: string
+  type: "maestro.clarification.decided"
+  properties: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    methodVersion: string
+    decision: string
+    question: string
+  }
+}
+
+export type EventMaestroScopeDecided = {
+  id: string
+  type: "maestro.scope.decided"
+  properties: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    methodVersion: string
+    scopeID: string
+  }
+}
+
+export type EventMaestroHeldEntered = {
+  id: string
+  type: "maestro.held.entered"
+  properties: {
+    sessionID: string
+    projectID: string
+    mode: "maestro"
+    predecessorID: string
+    reason: string
   }
 }
 

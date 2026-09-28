@@ -182,6 +182,54 @@ export namespace Admission {
   export type Decided = typeof Decided.Type
 }
 
+export namespace Clarification {
+  export const Decided = Event.define({
+    type: "maestro.clarification.decided",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      projectID: Schema.String,
+      mode: Schema.Literal("maestro"),
+      predecessorID: Schema.String,
+      methodVersion: Schema.String,
+      decision: Schema.String,
+      question: Schema.String,
+    },
+  })
+  export type Decided = typeof Decided.Type
+}
+
+export namespace Scope {
+  export const Decided = Event.define({
+    type: "maestro.scope.decided",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      projectID: Schema.String,
+      mode: Schema.Literal("maestro"),
+      predecessorID: Schema.String,
+      methodVersion: Schema.String,
+      scopeID: Schema.String,
+    },
+  })
+  export type Decided = typeof Decided.Type
+}
+
+export namespace Held {
+  export const Entered = Event.define({
+    type: "maestro.held.entered",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.String,
+      projectID: Schema.String,
+      mode: Schema.Literal("maestro"),
+      predecessorID: Schema.String,
+      reason: Schema.String,
+    },
+  })
+  export type Entered = typeof Entered.Type
+}
+
 export const Definitions = Event.inventory(
   Approval.Presented,
   Approval.Decided,
@@ -190,4 +238,7 @@ export const Definitions = Event.inventory(
   Approval.ReservedV2,
   Approval.ConsumedV2,
   Admission.Decided,
+  Clarification.Decided,
+  Scope.Decided,
+  Held.Entered,
 )
