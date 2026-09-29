@@ -7,15 +7,11 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Effect } from "effect"
 import { eq } from "drizzle-orm"
+import path from "node:path"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
 import { SessionID } from "@/session/schema"
-import {
-  readReview,
-  recordReview,
-  recordValidation,
-  reviewPolicyHash,
-} from "../../src/maestro/validation-record"
+import { readReview, recordReview, recordValidation, reviewPolicyHash } from "../../src/maestro/validation-record"
 import { nativeProfiles, roster } from "../../src/maestro/roster"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -68,6 +64,7 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
   const test = yield* TestInstance
   const git = yield* Git.Service
   const base = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
+  const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: test.directory })
   yield* Effect.promise(() => Bun.write(`${test.directory}/proof.txt`, "proof\n"))
   yield* git.run(["add", "proof.txt"], { cwd: test.directory })
   yield* git.run(["commit", "-m", "proof"], { cwd: test.directory })
@@ -97,12 +94,18 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
   return {
     baseSHA: base.text().trim(),
     headSHA: head.text().trim(),
-    worktree: test.directory,
+    worktree: root.text().trim(),
     changedPaths: names.text().split("\0").filter(Boolean),
     encoding: "base64" as const,
     bytes: diff.stdout.toString("base64"),
   }
 })
+
+function expectReviewRejection(error: { _tag: string }, reason: string) {
+  expect(error._tag).toBe("MaestroReviewRejected")
+  if (!("reason" in error) || typeof error.reason !== "string") throw new Error("expected review rejection")
+  expect(error.reason).toBe(reason)
+}
 
 describe("Maestro validation receipt", () => {
   it.instance(
@@ -253,14 +256,14 @@ describe("Maestro validation receipt", () => {
           reviewMethodVersion: "review-v1",
           verdict: "APPROVE",
           findings: [],
-          artifact: { ...evidence, worktree: "/forged" },
+          artifact: { ...evidence, worktree: path.resolve(evidence.worktree, "..", "forged") },
           checks: input.checks,
         }).pipe(Effect.flip)
 
-        expect(paths).toMatchObject({ _tag: "MaestroReviewRejected", reason: "artifact-path-mismatch" })
-        expect(bytes).toMatchObject({ _tag: "MaestroReviewRejected", reason: "artifact-bytes-mismatch" })
-        expect(sha).toMatchObject({ _tag: "MaestroReviewRejected", reason: "artifact-sha-not-found" })
-        expect(worktree).toMatchObject({ _tag: "MaestroReviewRejected", reason: "artifact-worktree-mismatch" })
+        expectReviewRejection(paths, "artifact-path-mismatch")
+        expectReviewRejection(bytes, "artifact-bytes-mismatch")
+        expectReviewRejection(sha, "artifact-sha-not-found")
+        expectReviewRejection(worktree, "artifact-worktree-mismatch")
       }),
     { git: true },
   )
@@ -328,7 +331,7 @@ describe("Maestro validation receipt", () => {
         }).pipe(Effect.flip)
         const { db } = yield* Database.Service
 
-        expect(rejected).toMatchObject({ _tag: "MaestroReviewRejected", reason: "artifact-parentage-mismatch" })
+        expectReviewRejection(rejected, "artifact-parentage-mismatch")
         expect(yield* db.select().from(EventTable).all().pipe(Effect.orDie)).toHaveLength(1)
       }),
     { git: true },
@@ -381,7 +384,7 @@ describe("Maestro validation receipt", () => {
           checks: input.checks,
         }).pipe(Effect.flip)
 
-        expect(rejected).toMatchObject({ _tag: "MaestroReviewRejected", reason: "finding-not-in-artifact" })
+        expectReviewRejection(rejected, "finding-not-in-artifact")
       }),
     { git: true },
   )

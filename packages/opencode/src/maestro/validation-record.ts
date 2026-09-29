@@ -5,6 +5,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { createHash } from "node:crypto"
+import { realpath } from "node:fs/promises"
 import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { eq } from "drizzle-orm"
@@ -160,6 +161,19 @@ function actor(session: Session.Info, memberId: "maestro" | "lucy") {
   return { version: "rfc8785-v1" as const, bytes, sha256: createHash("sha256").update(bytes, "utf8").digest("hex") }
 }
 
+const canonicalPath = Effect.fn("MaestroValidation.canonicalPath")(function* (value: string) {
+  const resolved = yield* Effect.tryPromise({
+    try: () => realpath(value),
+    catch: () => path.resolve(value),
+  }).pipe(Effect.catch((fallback) => Effect.succeed(fallback)))
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved
+})
+
+function containsPath(root: string, target: string) {
+  const relative = path.relative(root, target)
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+}
+
 const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (sessionID: string, projectID: string) {
   const { db } = yield* Database.Service
   const row = yield* db
@@ -179,11 +193,9 @@ const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!project) return yield* new ValidationRejectedError({ reason: "session-project-absent" })
-  const roots = [project.worktree, ...project.sandboxes]
-  if (!roots.some((root) => {
-    const relative = path.relative(root, session.directory)
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
-  })) {
+  const directory = yield* canonicalPath(session.directory)
+  const roots = yield* Effect.forEach([project.worktree, ...project.sandboxes], canonicalPath)
+  if (!roots.some((root) => containsPath(root, directory))) {
     return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   }
   return { session, project }
@@ -308,7 +320,7 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
     input.artifact,
     record.workCardHash,
     trusted.session.directory,
-    trusted.session.directory,
+    trusted.project.worktree,
   )
   if (record.contextRecordID) {
     const context = yield* readContext(record.contextRecordID)
@@ -419,10 +431,12 @@ const requireArtifact = Effect.fn("MaestroReview.requireArtifact")(function* (
   const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
   const worktree = root.text().trim()
   if (root.exitCode !== 0 || !worktree) return yield* new ReviewRejectedError({ reason: "git-root-unavailable" })
-  const relativeDirectory = path.relative(worktree, directory)
+  const canonicalWorktree = yield* canonicalPath(worktree)
+  const canonicalDirectory = yield* canonicalPath(directory)
   if (
-    artifact.worktree !== worktree ||
-    (relativeDirectory !== "" && (relativeDirectory.startsWith("..") || path.isAbsolute(relativeDirectory)))
+    (yield* canonicalPath(artifact.worktree)) !== canonicalWorktree ||
+    (yield* canonicalPath(projectWorktree)) !== canonicalWorktree ||
+    !containsPath(canonicalWorktree, canonicalDirectory)
   ) {
     return yield* new ReviewRejectedError({ reason: "artifact-worktree-mismatch" })
   }
