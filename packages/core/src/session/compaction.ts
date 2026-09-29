@@ -134,9 +134,18 @@ const settings = (documents: readonly Config.Entry[]) => {
   )
 }
 
-const select = (
+/**
+ * Split the conversation into a `head` to summarise and a `recent` tail to keep verbatim.
+ *
+ * `tokens` bounds the recent tail, walked backwards from the newest entry. `maxHeadTokens`
+ * bounds the head, which otherwise grows without limit as a session ages; when it is
+ * supplied the oldest head entries are dropped, keeping the most recent ones, so a
+ * summary prompt stays within the model context instead of the whole run being abandoned.
+ */
+export const select = (
   entries: readonly Entry[],
   tokens: number,
+  maxHeadTokens: number = Number.POSITIVE_INFINITY,
 ): { readonly head: string; readonly recent: string } | undefined => {
   const conversation = entries
     .filter((entry) => entry.message.type !== "compaction")
@@ -152,10 +161,27 @@ const select = (
     split = index
   }
   return {
-    head: conversation.slice(0, split).join("\n\n"),
+    head: keepTailWithin(conversation.slice(0, split), maxHeadTokens).join("\n\n"),
     recent: conversation.slice(split).join("\n\n"),
   }
 }
+
+function keepTailWithin(items: readonly string[], budget: number) {
+  if (!Number.isFinite(budget)) return items
+  let total = 0
+  let start = items.length
+  for (let index = items.length - 1; index >= 0; index--) {
+    const next = total + Token.estimate(items[index])
+    if (next > budget) break
+    total = next
+    start = index
+  }
+  return items.slice(start)
+}
+
+/** Prompt size with no conversation body, so the head budget can be the exact remainder. */
+export const promptOverhead = (previousSummary: string | undefined) =>
+  Token.estimate(buildPrompt({ previousSummary, context: [] }))
 
 export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) => {
   const conversation = `Here is the conversation so far:\n\n<conversation>\n${input.context.join("\n\n")}\n</conversation>`
@@ -179,14 +205,21 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    const selected = select(input.entries, config.tokens)
+    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
+    const previousText = previousSummary?.type === "compaction" ? previousSummary.summary : undefined
+    // Bound the head by the exact room left in the context once the prior summary and the
+    // prompt scaffolding are paid for. Without this the head grows with the session until
+    // it no longer fits, and this function returns false on every later turn, so a session
+    // that outgrows its context never compacts again and its history grows without bound.
+    const headBudget = Math.max(0, context - summaryOutput - promptOverhead(previousText))
+    const selected = select(input.entries, config.tokens, headBudget)
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
     const summaryPrompt = buildPrompt({
-      previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
+      previousSummary: previousText,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+    // Retained as a hard guard: if the prompt still does not fit, the request is not sent.
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
