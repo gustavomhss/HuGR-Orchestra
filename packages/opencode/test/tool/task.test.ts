@@ -25,6 +25,8 @@ import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { EventV2 } from "@opencode-ai/core/event"
+import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -169,6 +171,51 @@ function reply(
 }
 
 describe("tool.task", () => {
+  it.instance("dispatches exact routed child from AuthorizationGranted", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const { chat, assistant } = yield* seed()
+      const authorizationID = EventV2.ID.make("evt_maestro_authorization_task_test")
+      yield* events.publish(
+        MaestroEvent.Authorization.Granted,
+        {
+          sessionID: chat.id,
+          projectID: chat.projectID,
+          approvalMessageID: "msg_approval",
+          validationRecordID: "evt_validation",
+          workCardHash: "a".repeat(64),
+          routedMemberID: "charlie",
+          rosterHash: "b".repeat(64),
+          grantHash: "c".repeat(64),
+          reviewPolicyHash: "d".repeat(64),
+          actor: { version: "rfc8785-v1", bytes: "actor", sha256: "e".repeat(64) },
+          reviewerID: "lucy",
+          taskIntentHash: "f".repeat(64),
+          methodVersion: "authorization-v1",
+        },
+        { id: authorizationID },
+      )
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const result = yield* def.execute(
+        { description: "implement card", prompt: "implement card", subagent_type: "charlie", authorizationID },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps() },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+      const child = (yield* (yield* Session.Service).children(chat.id))[0]
+      expect(child?.agent).toBe("charlie")
+      expect(result.metadata.sessionId).toBe(child?.id)
+    }),
+  )
+
   it.instance(
     "description sorts subagents by name and is stable across calls",
     () =>
