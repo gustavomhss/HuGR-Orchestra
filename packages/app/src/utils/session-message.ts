@@ -45,79 +45,133 @@ function normalizeToolMetadata(name: string, metadata: Record<string, unknown>) 
   }
 }
 
-export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[]) {
+type Selection = { agent: string; model: { id: string; providerID: string; variant?: string }; parentID?: string }
+
+type Carrier = {
+  readonly messages: Message[]
+  readonly parts: Map<string, Part[]>
+  select(message: SessionMessageInfo, state: Selection): void
+  adopt(parentID: string, agent: string, model: { id: string; providerID: string; variant?: string }): void
+}
+
+function buildCarrier(sessionID: string): Carrier {
   const messages: Message[] = []
   const parts = new Map<string, Part[]>()
-  let agent = ""
-  let model = emptyModel
-  let parentID: string | undefined
-
-  source.forEach((message) => {
-    if (message.type === "agent-switched") {
-      agent = message.agent
-      return
-    }
-    if (message.type === "model-switched") {
-      model = message.model
-      return
-    }
-    if (message.type === "user") {
-      parentID = message.id
-      messages.push(userMessage(sessionID, message, agent, model))
-      parts.set(message.id, userParts(sessionID, message))
-      return
-    }
-    if (message.type === "synthetic" && message.description?.trim()) {
-      parentID = message.id
-      messages.push({
-        id: message.id,
-        sessionID,
-        role: "user",
-        time: message.time,
-        agent,
-        model: { providerID: model.providerID, modelID: model.id, variant: model.variant },
-      })
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.description, true)])
-      return
-    }
-    if (message.type === "shell") {
-      messages.push(...shellMessages(sessionID, message, agent, model))
-      parts.set(message.id, [textPart(sessionID, message.id, 0, message.command)])
-      parts.set(`${message.id}:assistant`, [shellPart(sessionID, message)])
-      parentID = undefined
-      return
-    }
-    if (message.type === "assistant") {
-      agent = message.agent
-      model = message.model
-      if (!parentID) return
-      const parent = messages.findLast((item) => item.id === parentID)
-      if (parent?.role === "user") {
-        parent.agent = message.agent
-        parent.model = {
-          providerID: message.model.providerID,
-          modelID: message.model.id,
-          variant: message.model.variant,
-        }
+  return {
+    messages,
+    parts,
+    select(message, state) {
+      if (message.type === "user") {
+        messages.push(userMessage(sessionID, message, state.agent, state.model))
+        parts.set(message.id, userParts(sessionID, message))
+        return
       }
-      messages.push(assistantMessage(sessionID, parentID, message))
-      parts.set(message.id, assistantParts(sessionID, message))
-      return
-    }
-    if (message.type !== "compaction" || !parentID) return
-    parts.set(parentID, [
-      ...(parts.get(parentID) ?? []),
-      {
-        id: `${message.id}:compaction`,
-        sessionID,
-        messageID: parentID,
-        type: "compaction",
-        auto: message.reason === "auto",
-      },
-    ])
-  })
+      if (message.type === "synthetic") {
+        messages.push({
+          id: message.id,
+          sessionID,
+          role: "user",
+          time: message.time,
+          agent: state.agent,
+          model: { providerID: state.model.providerID, modelID: state.model.id, variant: state.model.variant },
+        })
+        parts.set(message.id, [textPart(sessionID, message.id, 0, message.description!, true)])
+        return
+      }
+      if (message.type === "shell") {
+        messages.push(...shellMessages(sessionID, message, state.agent, state.model))
+        parts.set(message.id, [textPart(sessionID, message.id, 0, message.command)])
+        parts.set(`${message.id}:assistant`, [shellPart(sessionID, message)])
+        return
+      }
+      if (message.type === "assistant") {
+        if (!state.parentID) return
+        messages.push(assistantMessage(sessionID, state.parentID, message))
+        parts.set(message.id, assistantParts(sessionID, message))
+        return
+      }
+      if (message.type === "compaction") {
+        if (!state.parentID) return
+        parts.set(state.parentID, [
+          ...(parts.get(state.parentID) ?? []),
+          {
+            id: `${message.id}:compaction`,
+            sessionID,
+            messageID: state.parentID,
+            type: "compaction",
+            auto: message.reason === "auto",
+          },
+        ])
+        return
+      }
+    },
+    adopt(parentID, agent, model) {
+      const parent = messages.findLast((item) => item.id === parentID)
+      if (parent?.role !== "user") return
+      parent.agent = agent
+      parent.model = { providerID: model.providerID, modelID: model.id, variant: model.variant }
+    },
+  }
+}
 
-  return { messages, parts }
+function advance(message: SessionMessageInfo, state: Selection) {
+  if (message.type === "agent-switched") {
+    state.agent = message.agent
+    return false
+  }
+  if (message.type === "model-switched") {
+    state.model = message.model
+    return false
+  }
+  if (message.type === "user" || (message.type === "synthetic" && message.description?.trim())) {
+    state.parentID = message.id
+    return true
+  }
+  if (message.type === "synthetic") return false
+  if (message.type === "shell") {
+    state.parentID = undefined
+    return true
+  }
+  if (message.type !== "assistant") return message.type === "compaction"
+  state.agent = message.agent
+  state.model = message.model
+  return true
+}
+
+export function normalizeSessionMessages(sessionID: string, source: readonly SessionMessageInfo[]) {
+  const carrier = buildCarrier(sessionID)
+  const state: Selection = { agent: "", model: emptyModel }
+  for (const message of source) {
+    if (message.type === "assistant" && state.parentID)
+      carrier.adopt(state.parentID, message.agent, message.model)
+    if (!advance(message, state)) continue
+    carrier.select(message, state)
+  }
+  return { messages: carrier.messages, parts: carrier.parts }
+}
+
+export function normalizeTouchedSessionMessages(
+  sessionID: string,
+  source: readonly SessionMessageInfo[],
+  touched: ReadonlySet<string>,
+) {
+  const carrier = buildCarrier(sessionID)
+  const state: Selection = { agent: "", model: emptyModel }
+  if (touched.size === 0) return { messages: carrier.messages, parts: carrier.parts }
+  for (const message of source) {
+    if (message.type === "assistant" && state.parentID && touched.has(state.parentID))
+      carrier.adopt(state.parentID, message.agent, message.model)
+    if (!advance(message, state)) continue
+    // A shell entry emits two ids; a compaction entry writes onto its parent's parts.
+    const emits = message.type === "compaction" ? !!state.parentID && touched.has(state.parentID) : wanted(message, touched)
+    if (emits) carrier.select(message, state)
+  }
+  return { messages: carrier.messages, parts: carrier.parts }
+}
+
+function wanted(message: SessionMessageInfo, touched: ReadonlySet<string>) {
+  if (touched.has(message.id)) return true
+  return message.type === "shell" && touched.has(`${message.id}:assistant`)
 }
 
 function shellMessages(

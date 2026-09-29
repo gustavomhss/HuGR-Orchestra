@@ -18,7 +18,12 @@ import { message as cleanMessage } from "@/utils/diffs"
 import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
-import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
+import {
+  compareMessages,
+  messageKey,
+  normalizeSessionMessages,
+  normalizeTouchedSessionMessages,
+} from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
@@ -898,7 +903,7 @@ export function createServerSession(
       if (message.type === "compaction" && touched.has(message.id) && parentID) touched.add(parentID)
     }
 
-    const normalized = normalizeSessionMessages(reduction.sessionID, reduction.messages)
+    const normalized = normalizeTouchedSessionMessages(reduction.sessionID, reduction.messages, touched)
     batch(() => {
       for (const message of normalized.messages) {
         if (!touched.has(message.id)) continue
