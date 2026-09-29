@@ -21,6 +21,7 @@ export const nativeProfiles = Object.freeze({
     read: "allow",
     glob: "allow",
     grep: "allow",
+    maestro_record_review: "allow",
   } as const),
 } as const)
 

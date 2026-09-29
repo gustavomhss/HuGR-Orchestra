@@ -2,7 +2,13 @@ import { Effect, Schema } from "effect"
 import { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
+import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 import { recordReview, recordValidation } from "@/maestro/validation-record"
+import { readPlanRevision } from "@/maestro/plan-revision"
+import { readContext } from "@/maestro/context-record"
 import { Database } from "@opencode-ai/core/database/database"
 import * as Tool from "./tool"
 
@@ -13,6 +19,9 @@ const Check = Schema.Struct({
 })
 
 const ValidationParameters = Schema.Struct({
+  planRevisionID: Schema.optional(Schema.String),
+  contextRecordID: Schema.optional(Schema.String),
+  contextHash: Schema.optional(Schema.String),
   projectID: Schema.String,
   workCardID: Schema.String,
   workCard: Schema.String,
@@ -54,6 +63,9 @@ export const MaestroRecordValidationTool = Tool.define(
       description: "Record validation evidence for one routed work card. Maestro only.",
       parameters: ValidationParameters,
       strictParameters: {
+        planRevisionID: true,
+        contextRecordID: true,
+        contextHash: true,
         projectID: true,
         workCardID: true,
         workCard: true,
@@ -67,7 +79,26 @@ export const MaestroRecordValidationTool = Tool.define(
           if (agent?.id !== "maestro" || agent.native !== true) {
             return yield* Effect.fail(new Error("Validation recording requires Maestro"))
           }
-          const record = yield* recordValidation({ ...params, sessionID: ctx.sessionID, validatorID: "maestro" })
+          if (!params.planRevisionID || !params.contextRecordID || !params.contextHash)
+            return yield* Effect.fail(new Error("Validation requires PlanRevision and current ContextRecord"))
+          const plan = yield* readPlanRevision(params.planRevisionID)
+          const context = yield* readContext(params.contextRecordID)
+          if (!plan || !context || context.planRevisionID !== plan.id || context.contextHash !== params.contextHash)
+            return yield* Effect.fail(new Error("Validation context does not match PlanRevision"))
+          const sessionRow = yield* database.db
+            .select()
+            .from(SessionTable)
+            .where(eq(SessionTable.id, SessionID.make(ctx.sessionID)))
+            .get()
+            .pipe(Effect.orDie)
+          if (!sessionRow) return yield* Effect.fail(new Error("Validation session not found"))
+          const session = Session.fromRow(sessionRow)
+          const record = yield* recordValidation({
+            ...params,
+            projectID: session.projectID,
+            sessionID: ctx.sessionID,
+            validatorID: "maestro",
+          })
           return {
             title: `Validation ${record.outcome}`,
             metadata: { validationRecordID: record.id, outcome: record.outcome },

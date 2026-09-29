@@ -22,6 +22,9 @@ type ReviewData = Schema.Schema.Type<typeof MaestroEvent.Review.Received.data>
 
 export type RecordValidationInput = {
   sessionID: string
+  planRevisionID?: string
+  contextRecordID?: string
+  contextHash?: string
   projectID: string
   workCardID: string
   workCard: string
@@ -73,6 +76,10 @@ export class ReviewConflictError extends Schema.TaggedErrorClass<ReviewConflictE
 
 function hash(value: unknown) {
   return createHash("sha256").update(stable(value)).digest("hex")
+}
+
+export function validationRecordHash(record: ValidationData) {
+  return hash(record)
 }
 
 function cardHash(workCard: string) {
@@ -129,6 +136,9 @@ function validation(input: RecordValidationInput): Omit<ValidationData, "actor">
   if (!reviewer?.nativeProfile) throw new ValidationRejectedError({ reason: "reviewer-policy-missing" })
   return {
     sessionID,
+    ...(input.planRevisionID ? { planRevisionID: input.planRevisionID } : {}),
+    ...(input.contextRecordID ? { contextRecordID: input.contextRecordID } : {}),
+    ...(input.contextHash ? { contextHash: input.contextHash } : {}),
     projectID,
     workCardID,
     workCard,
@@ -168,7 +178,11 @@ const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!project) return yield* new ValidationRejectedError({ reason: "session-project-absent" })
-  if (path.relative(project.worktree, session.directory).startsWith("..")) {
+  const roots = [project.worktree, ...project.sandboxes]
+  if (!roots.some((root) => {
+    const relative = path.relative(root, session.directory)
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+  })) {
     return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   }
   return { session, project }
@@ -201,6 +215,7 @@ function requireChecks(value: unknown): Check[] {
 }
 
 export const readValidation = Effect.fn("MaestroValidation.read")(function* (id: string) {
+  if (!id.startsWith("evt_")) return undefined
   const { db } = yield* Database.Service
   const row = yield* db
     .select()
@@ -249,6 +264,7 @@ export const recordValidation = Effect.fn("MaestroValidation.record")(function* 
 })
 
 export const readReview = Effect.fn("MaestroReview.read")(function* (id: string) {
+  if (!id.startsWith("evt_")) return undefined
   const { db } = yield* Database.Service
   const row = yield* db
     .select()
@@ -258,6 +274,20 @@ export const readReview = Effect.fn("MaestroReview.read")(function* (id: string)
     .pipe(Effect.orDie)
   if (!row || row.type !== EventV2.versionedType(MaestroEvent.Review.Received.type, 1)) return undefined
   return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Review.Received.data)(row.data) }
+})
+
+export const findReview = Effect.fn("MaestroReview.find")(function* (sessionID: string, validationRecordID: string) {
+  const { db } = yield* Database.Service
+  const rows = yield* db
+    .select({ id: EventTable.id, type: EventTable.type, data: EventTable.data })
+    .from(EventTable)
+    .where(eq(EventTable.aggregate_id, sessionID))
+    .all()
+    .pipe(Effect.orDie)
+  return rows
+    .filter((row) => row.type === EventV2.versionedType(MaestroEvent.Review.Received.type, 1))
+    .map((row) => ({ id: row.id, data: Schema.decodeUnknownSync(MaestroEvent.Review.Received.data)(row.data) }))
+    .find((row) => row.data.validationRecordID === validationRecordID)
 })
 
 export const recordReview = Effect.fn("MaestroReview.record")(function* (input: RecordReviewInput) {
@@ -277,7 +307,7 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
     input.artifact,
     record.workCardHash,
     trusted.session.directory,
-    trusted.project.worktree,
+    trusted.session.directory,
   )
   const checks = yield* Effect.try({
     try: () => requireChecks(input.checks),
@@ -382,7 +412,11 @@ const requireArtifact = Effect.fn("MaestroReview.requireArtifact")(function* (
   const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
   const worktree = root.text().trim()
   if (root.exitCode !== 0 || !worktree) return yield* new ReviewRejectedError({ reason: "git-root-unavailable" })
-  if (path.resolve(worktree) !== path.resolve(projectWorktree) || artifact.worktree !== worktree) {
+  const relativeDirectory = path.relative(worktree, directory)
+  if (
+    artifact.worktree !== worktree ||
+    (relativeDirectory !== "" && (relativeDirectory.startsWith("..") || path.isAbsolute(relativeDirectory)))
+  ) {
     return yield* new ReviewRejectedError({ reason: "artifact-worktree-mismatch" })
   }
   const base = yield* git.run(["rev-parse", "--verify", `${artifact.baseSHA}^{commit}`], { cwd: worktree })

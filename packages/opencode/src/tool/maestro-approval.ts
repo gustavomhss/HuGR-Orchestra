@@ -1,8 +1,13 @@
 import { Effect, Schema } from "effect"
-import { recordApproval } from "@/maestro/approval-record"
+import { presentApprovalFromSession, recordApproval } from "@/maestro/approval-record"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "@/agent/agent"
+import { readPlanRevision } from "@/maestro/plan-revision"
+import { readContext } from "@/maestro/context-record"
+import { findReview, readValidation, validationRecordHash } from "@/maestro/validation-record"
+import { renderPresentation } from "@/maestro/approval"
+import { Session } from "@/session/session"
 import * as Tool from "./tool"
 
 const PresentationParameters = Schema.Struct({
@@ -11,7 +16,9 @@ const PresentationParameters = Schema.Struct({
   revisionHash: Schema.String,
   validationHash: Schema.String,
   contextHash: Schema.String,
+  contextRecordID: Schema.optional(Schema.String),
   policyHash: Schema.String,
+  taskHash: Schema.optional(Schema.String),
   intent: Schema.Struct({
     subagentType: Schema.String,
     prompt: Schema.String,
@@ -29,7 +36,10 @@ const PresentationParameters = Schema.Struct({
 export const MaestroPresentApprovalTool = Tool.define(
   "maestro_present_approval",
   Effect.gen(function* () {
+    const database = yield* Database.Service
+    const events = yield* EventV2Bridge.Service
     const agents = yield* Agent.Service
+    const sessions = yield* Session.Service
     return {
       description:
         "Unavailable until durable plan revision and validation readers exist. Refuses rather than treat model-supplied fields as approval authority.",
@@ -40,12 +50,51 @@ export const MaestroPresentApprovalTool = Tool.define(
           if (agent?.id !== "maestro" || agent.native !== true) {
             return yield* Effect.fail(new Error("Approval presentation requires Maestro"))
           }
-          return yield* Effect.fail(
-            new Error(
-              "Approval presentation unavailable: durable plan revision and validation readers are not implemented",
-            ),
+          if (!_params.planRevisionID.startsWith("evt_") || !_params.validationRecordID.startsWith("evt_")) {
+            return yield* Effect.fail(
+              new Error("Approval presentation unavailable: durable plan revision and validation readers are not implemented"),
+            )
+          }
+          const plan = yield* readPlanRevision(_params.planRevisionID)
+          const validation = yield* readValidation(_params.validationRecordID)
+          const context = yield* readContext(_params.contextRecordID ?? _params.contextHash)
+          if (!plan || !validation || !context) return yield* Effect.fail(new Error("Approval presentation evidence not found"))
+          if (plan.sessionID !== ctx.sessionID || validation.sessionID !== ctx.sessionID || context.sessionID !== ctx.sessionID)
+            return yield* Effect.fail(new Error("Approval presentation session mismatch"))
+          if (validation.outcome !== "VALID") return yield* Effect.fail(new Error("Approval presentation requires VALID validation"))
+          if (context.planRevisionID !== plan.id) return yield* Effect.fail(new Error("Approval context revision mismatch"))
+          const review = yield* findReview(ctx.sessionID, validation.id)
+          if (!review || review.data.verdict !== "APPROVE") return yield* Effect.fail(new Error("Approval presentation requires Lucy APPROVE"))
+          const presentation = yield* presentApprovalFromSession({
+            sessionID: ctx.sessionID,
+            assistantMessageID: ctx.messageID,
+            callID: ctx.callID ?? "",
+            memberID: "maestro",
+            planRevisionID: plan.id,
+            validationRecordID: validation.id,
+            revisionHash: plan.revisionHash,
+            validationHash: validationRecordHash(validation),
+            contextHash: context.contextHash,
+            policyHash: validation.reviewPolicyHash,
+            taskHash: _params.taskHash ?? "",
+            intent: _params.intent,
+            methodVersion: _params.methodVersion,
+            plan: plan.goal.value,
+            provenance: `admission ${plan.admissionMessageID}`,
+            assumptions: plan.assumptions.map((item) => item.value),
+            validationLedger: validation.checks.map((check) => `${check.id}: ${check.status} (${check.detail})`).join("\n"),
+            contextState: "CURRENT",
+          }).pipe(
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(EventV2Bridge.Service, events),
+            Effect.provideService(Session.Service, sessions),
           )
-        }).pipe(Effect.provideService(Agent.Service, agents), Effect.orDie),
+          return { title: "Approval presented", metadata: { presentationID: presentation.id }, output: renderPresentation(presentation) }
+        }).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.provideService(Agent.Service, agents),
+          Effect.orDie,
+        ),
     }
   }),
 )

@@ -659,7 +659,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         time: { created: Date.now() },
         tools: input.tools,
-        agent: ag.name,
+        agent: ag.id ?? ag.name,
         model: {
           providerID: model.providerID,
           modelID: model.modelID,

@@ -332,16 +332,25 @@ describe("Maestro governed lifecycle", () => {
       const registry = yield* ToolRegistry.Service
       const build = yield* agent.get("build")
       const maestro = yield* agent.get("maestro")
-      if (!build || !maestro) throw new Error("expected native agents")
+      const lucy = yield* agent.get("lucy")
+      if (!build || !maestro || !lucy) throw new Error("expected native agents")
       const buildTools = yield* registry.tools({ ...ref, agent: build })
       const maestroTools = yield* registry.tools({ ...ref, agent: maestro })
+      const lucyTools = yield* registry.tools({ ...ref, agent: lucy })
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_present_approval")
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_approval")
       expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_admission")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_present_approval")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_approval")
       expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_admission")
+      expect(lucyTools.map((tool) => tool.id)).toContain("maestro_record_review")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("maestro_request_review")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("task")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("edit")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("write")
+      expect(lucyTools.map((tool) => tool.id)).not.toContain("shell")
     }),
+    15_000,
   )
 
   it.instance(

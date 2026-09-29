@@ -182,6 +182,60 @@ export namespace Admission {
   export type Decided = typeof Decided.Type
 }
 
+export namespace PlanRevision {
+  const Field = Schema.Struct({
+    value: Schema.String,
+    source: Schema.Literals(["stakeholder", "maestro", "orientation"]),
+  })
+
+  export const Recorded = Event.define({
+    type: "maestro.plan_revision.recorded",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      id: Schema.String,
+      sessionID: Schema.String,
+      admissionMessageID: Schema.String,
+      methodVersion: Schema.String,
+      revision: Schema.Literal("v1"),
+      goal: Field,
+      acceptance: Schema.Array(Field),
+      scope: Schema.Array(Field),
+      constraints: Schema.Array(Field),
+      reviewRequirement: Field,
+      contextRequirement: Schema.Literal("PENDING"),
+      assumptions: Schema.Array(Field),
+      risks: Schema.Array(Field),
+      status: Schema.Literal("PROPOSED"),
+      revisionHash: Schema.String,
+      createdAt: NonNegativeInt,
+    },
+  })
+  export type Recorded = typeof Recorded.Type
+}
+
+export namespace Context {
+  export const Recorded = Event.define({
+    type: "maestro.context.recorded",
+    durable: { version: 1, aggregate: "sessionID" },
+    schema: {
+      id: Schema.String,
+      sessionID: Schema.String,
+      planRevisionID: Schema.String,
+      projectID: Schema.String,
+      directory: Schema.String,
+      mode: Schema.Literals(["GROUNDED", "UNGROUNDED"]),
+      branch: Schema.String,
+      headSHA: Schema.String,
+      changedPaths: Schema.Array(Schema.String),
+      currentEvidenceIdentityHash: Schema.String,
+      contextHash: Schema.String,
+      status: Schema.Literal("CURRENT"),
+      createdAt: NonNegativeInt,
+    },
+  })
+  export type Recorded = typeof Recorded.Type
+}
+
 export namespace Clarification {
   export const Decided = Event.define({
     type: "maestro.clarification.decided",
@@ -236,6 +290,9 @@ export namespace Validation {
     durable: { version: 1, aggregate: "sessionID" },
     schema: {
       sessionID: Schema.NonEmptyString,
+      planRevisionID: Schema.optional(Schema.NonEmptyString),
+      contextRecordID: Schema.optional(Schema.NonEmptyString),
+      contextHash: Schema.optional(Schema.NonEmptyString),
       projectID: Schema.NonEmptyString,
       workCardID: Schema.NonEmptyString,
       workCard: Schema.NonEmptyString,

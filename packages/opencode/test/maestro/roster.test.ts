@@ -3,7 +3,16 @@ import { createRoster, lookupRosterMember, roster } from "../../src/maestro/rost
 
 describe("Maestro roster", () => {
   test("declares exact nine contract seats in deterministic order", () => {
-    expect(roster).toEqual([
+    expect(
+      roster.map((member) => ({
+        displayName: member.displayName,
+        memberId: member.memberId,
+        role: member.role,
+        abilityClass: member.abilityClass,
+        returnCard: member.returnCard,
+        forbiddenActions: member.forbiddenActions,
+      })),
+    ).toEqual([
       {
         displayName: "Maestro",
         memberId: "maestro",
