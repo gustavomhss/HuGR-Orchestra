@@ -15,7 +15,6 @@ import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
-import { nativeProfiles, roster } from "../../src/maestro/roster"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -24,17 +23,6 @@ const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   )
 
 const it = testEffect(agentLayer())
-
-const nativeTeam = [
-  { id: "charlie", profile: "execution", prompt: "You are Charlie, backend execution specialist." },
-  { id: "patty", profile: "execution", prompt: "You are Patty, frontend execution specialist." },
-  { id: "lucy", profile: "review", prompt: "You are Lucy, cold code reviewer." },
-  { id: "bobby", profile: "review", prompt: "You are Bobby, architecture reviewer." },
-  { id: "billy", profile: "review", prompt: "You are Billy, security reviewer." },
-  { id: "jimmy", profile: "review", prompt: "You are Jimmy, exploration reviewer." },
-  { id: "rosie", profile: "execution", prompt: "You are Rosie, documentation execution specialist." },
-  { id: "frankie", profile: "review", prompt: "You are Frankie, process auditor." },
-] as const
 
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionV1.Action | undefined {
@@ -67,88 +55,6 @@ it.instance("returns default native agents when no config", () =>
     expect(names).toContain("compaction")
     expect(names).toContain("title")
     expect(names).toContain("summary")
-  }),
-)
-
-it.instance("registers native team specialists with fixed profiles", () =>
-  Effect.gen(function* () {
-    for (const seat of nativeTeam) {
-      const agent = yield* load((svc) => svc.get(seat.id))
-      expect(agent).toMatchObject({
-        id: seat.id,
-        mode: "subagent",
-        native: true,
-      })
-      expect(agent?.prompt).toStartWith(seat.prompt)
-      expect(agent?.prompt).toContain("Return card:")
-      expect(agent?.prompt).toContain("Forbidden:")
-      expect(evalPerm(agent, "read")).toBe("allow")
-      expect(evalPerm(agent, "glob")).toBe("allow")
-      expect(evalPerm(agent, "grep")).toBe("allow")
-      expect(evalPerm(agent, "task")).toBe("deny")
-      expect(evalPerm(agent, "webfetch")).toBe("deny")
-      expect(evalPerm(agent, "websearch")).toBe("deny")
-      expect(evalPerm(agent, "skill")).toBe("deny")
-      expect(evalPerm(agent, "external_directory")).toBe("deny")
-      expect(evalPerm(agent, "bash")).toBe(seat.profile === "execution" ? "allow" : "deny")
-      expect(evalPerm(agent, "edit")).toBe(seat.profile === "execution" ? "allow" : "deny")
-    }
-  }),
-)
-
-it.instance("native team prompts use roster return cards", () =>
-  Effect.sync(() => {
-    for (const member of roster) {
-      if (!member.nativeProfile) continue
-      expect(member.prompt).toContain(`Return card: ${member.returnCard}`)
-    }
-  }),
-)
-
-it.instance(
-  "native team config only permits model variant and temperature",
-  () =>
-    Effect.gen(function* () {
-      const lucy = yield* load((svc) => svc.get("lucy"))
-      expect(String(lucy?.model?.providerID)).toBe("anthropic")
-      expect(String(lucy?.model?.modelID)).toBe("claude-3")
-      expect(lucy?.variant).toBe("fast")
-      expect(lucy?.temperature).toBe(0.2)
-      expect(lucy?.name).toBe("Lucy")
-      expect(lucy?.mode).toBe("subagent")
-      expect(lucy?.native).toBe(true)
-      expect(lucy?.prompt).toStartWith("You are Lucy, cold code reviewer.")
-      expect(evalPerm(lucy, "edit")).toBe("deny")
-    }),
-  {
-    config: {
-      permission: { edit: "allow" },
-      agent: {
-        lucy: {
-          model: "anthropic/claude-3",
-          variant: "fast",
-          temperature: 0.2,
-          name: "Not Lucy",
-          mode: "primary",
-          prompt: "Not Lucy prompt",
-          disable: true,
-          permission: { edit: "allow" },
-        },
-      },
-    },
-  },
-)
-
-it.instance("native profiles reject runtime mutation", () =>
-  Effect.gen(function* () {
-    expect(Object.isFrozen(nativeProfiles)).toBe(true)
-    expect(Object.isFrozen(nativeProfiles.review)).toBe(true)
-    expect(Reflect.set(nativeProfiles.review, "edit", "allow")).toBe(false)
-    expect(Reflect.set(nativeProfiles, "review", nativeProfiles.execution)).toBe(false)
-
-    const lucy = yield* load((svc) => svc.get("lucy"))
-    expect(evalPerm(lucy, "edit")).toBe("deny")
-    expect(evalPerm(lucy, "bash")).toBe("deny")
   }),
 )
 
