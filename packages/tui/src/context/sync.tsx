@@ -653,6 +653,12 @@ export const {
                   draft.part[message.info.id] = parts
                 }
                 for (const message of removed) delete draft.part[message.id]
+                // Any part entry whose message is not in the visible window is unreachable.
+                // `message.removed` (revert) drops a message without touching its parts, and the
+                // loops above only iterate ids the API returned, so those entries used to survive
+                // for the process lifetime. Prune here, where parts are re-fetched authoritatively.
+                for (const messageID of Object.keys(draft.part))
+                  if (!visibleIDs.has(messageID)) delete draft.part[messageID]
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
