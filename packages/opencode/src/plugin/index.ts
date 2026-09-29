@@ -84,7 +84,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     XaiAuthPlugin,
     CerebrasPlugin,
     HuGRComposerPlugin,
-    ...(flags.client === "desktop" ? [AppDockPlugin] : []),
+    ...(process.env.OPENCODE_CLIENT === "desktop" ? [AppDockPlugin] : []),
   ]
 }
 
