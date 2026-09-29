@@ -12,6 +12,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
 import { MessageID, SessionID } from "@/session/schema"
+import { Session } from "@/session/session"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { MaestroRecordReviewTool, MaestroRecordValidationTool } from "@/tool/maestro-validation"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
@@ -33,7 +35,7 @@ const registry = testEffect(
 
 const direct = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Agent.node, Database.node, EventV2Bridge.node, Git.node, Truncate.node]),
+    LayerNode.group([Agent.node, Database.node, EventV2Bridge.node, Git.node, Session.node, SessionProjector.node, Truncate.node]),
     [
       [Npm.node, NpmTest.noop],
       [RuntimeFlags.node, RuntimeFlags.layer({ pure: true, disableDefaultPlugins: true })],

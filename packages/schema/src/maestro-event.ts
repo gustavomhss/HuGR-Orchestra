@@ -400,6 +400,27 @@ export namespace Dispatch {
     },
   })
   export type Reserved = typeof Reserved.Type
+
+  export const ReservedV2 = Event.define({
+    type: "maestro.dispatch.reserved",
+    durable: { version: 2, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      authorizationID: Schema.NonEmptyString,
+      childSessionID: Schema.NonEmptyString,
+      projectID: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      taskIntentHash: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      permission: Schema.Array(
+        Schema.Struct({
+          permission: Schema.String,
+          pattern: Schema.String,
+          action: Schema.Literals(["allow", "deny", "ask"]),
+        }),
+      ),
+    },
+  })
+  export type ReservedV2 = typeof ReservedV2.Type
 }
 
 export const Definitions = Event.inventory(
@@ -419,4 +440,5 @@ export const Definitions = Event.inventory(
   Review.Received,
   Authorization.Granted,
   Dispatch.Reserved,
+  Dispatch.ReservedV2,
 )

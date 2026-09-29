@@ -1521,6 +1521,11 @@ export type GlobalEvent = {
           projectID: string
           routedMemberID: string
           taskIntentHash: string
+          permission: Array<{
+            permission: string
+            pattern: string
+            action: "allow" | "deny" | "ask"
+          }>
         }
       }
     | {
@@ -4590,7 +4595,7 @@ export type SyncEventMaestroDispatchReserved = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "maestro.dispatch.reserved.1"
+    type: "maestro.dispatch.reserved.2"
     id: string
     seq: number
     aggregateID: string
@@ -4601,6 +4606,11 @@ export type SyncEventMaestroDispatchReserved = {
       projectID: string
       routedMemberID: string
       taskIntentHash: string
+      permission: Array<{
+        permission: string
+        pattern: string
+        action: "allow" | "deny" | "ask"
+      }>
     }
   }
 }
@@ -6538,6 +6548,11 @@ export type MaestroDispatchReserved = {
     projectID: string
     routedMemberID: string
     taskIntentHash: string
+    permission: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
   }
 }
 
@@ -8223,6 +8238,11 @@ export type EventMaestroDispatchReserved = {
     projectID: string
     routedMemberID: string
     taskIntentHash: string
+    permission: Array<{
+      permission: string
+      pattern: string
+      action: "allow" | "deny" | "ask"
+    }>
   }
 }
 

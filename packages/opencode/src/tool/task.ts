@@ -25,6 +25,7 @@ import { recordApproval } from "@/maestro/approval-record"
 import { createHash } from "node:crypto"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { reserveDispatch } from "@/maestro/dispatch"
+import { authorizationTaskIntentHash } from "@/maestro/authorization"
 import { nativeProfiles, roster } from "@/maestro/roster"
 import { Permission } from "@/permission"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -134,7 +135,8 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const caller =
-        (yield* agent.get(ctx.agent)) ?? (yield* agent.list()).find((candidate) => candidate.name === ctx.agent)
+        (yield* agent.get(ctx.agentID ?? ctx.agent)) ??
+        (!ctx.agentID ? (yield* agent.list()).find((candidate) => candidate.name === ctx.agent) : undefined)
       const nativeSeat = caller?.native
         ? roster.find((member) => member.memberId === caller.id && member.nativeProfile)
         : undefined
@@ -148,6 +150,7 @@ export const TaskTool = Tool.define(
       let governedChildID: SessionID | undefined
       let governedPresentationID: string | undefined
       let governedCallID: string | undefined
+      let replayReserved = false
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
@@ -173,12 +176,25 @@ export const TaskTool = Tool.define(
           }[]
            | undefined
       if (params.authorizationID) {
-        const reservation = yield* reserveDispatch({ sessionID: ctx.sessionID, authorizationID: params.authorizationID })
+        if (caller?.id !== "maestro" || caller.native !== true) {
+          return yield* Effect.fail(new Error("Authorized Task requires Maestro"))
+        }
+        const reservation = yield* reserveDispatch({
+          sessionID: ctx.sessionID,
+          authorizationID: params.authorizationID,
+          permission: childPermissions,
+        })
         if (reservation.routedMemberID !== nextID) {
           return yield* Effect.fail(new Error("Authorized Task denied: routed-seat-mismatch"))
         }
+        if (
+          reservation.taskIntentHash !==
+          authorizationTaskIntentHash({ subagentType: params.subagent_type, prompt: params.prompt, model: params.model })
+        ) {
+          return yield* Effect.fail(new Error("Authorized Task denied: task-intent-mismatch"))
+        }
         governedChildID = SessionID.make(reservation.childSessionID)
-        reservedChildPermissions = childPermissions
+        reservedChildPermissions = reservation.permission
       }
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
@@ -485,6 +501,7 @@ export const TaskTool = Tool.define(
           }
           const child = yield* sessions.get(childSessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
           if (!child) return yield* Effect.fail(new Error("Governed Task denied: consumed-child-missing"))
+          replayReserved = true
         }
       }
       let current = parent
@@ -591,6 +608,19 @@ export const TaskTool = Tool.define(
       if (governedChildID && (nextSession.parentID !== ctx.sessionID || nextSession.agent !== nextID)) {
         return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
       }
+      if (
+        governedChildID &&
+        (!permissionSnapshot ||
+          nextSession.permission?.length !== permissionSnapshot.length ||
+          nextSession.permission?.some(
+            (rule, index) =>
+              rule.permission !== permissionSnapshot[index]?.permission ||
+              rule.pattern !== permissionSnapshot[index]?.pattern ||
+              rule.action !== permissionSnapshot[index]?.action,
+          ))
+      ) {
+        return yield* Effect.fail(new Error("Governed Task denied: reservation-child-permission-mismatch"))
+      }
 
       if (params.governed) {
         const governed = params.governed
@@ -617,6 +647,20 @@ export const TaskTool = Tool.define(
         title: params.description,
         metadata,
       })
+
+      if (governedChildID && reserved) {
+        if (!replayReserved) return yield* Effect.fail(new Error("Governed Task denied: reserved-child-incomplete"))
+        const history = yield* MessageV2.stream(governedChildID)
+        const completed = history.findLast(
+          (message) => message.info.role === "assistant" && message.info.finish !== undefined && !message.info.error,
+        )
+        const output = completed?.parts.findLast((part) => part.type === "text")?.text ?? ""
+        return {
+          title: params.description,
+          metadata,
+          output: renderOutput({ sessionID: nextSession.id, state: "completed", text: output }),
+        }
+      }
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))

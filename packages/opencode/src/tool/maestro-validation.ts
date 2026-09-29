@@ -8,7 +8,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { eq } from "drizzle-orm"
 import { recordReview, recordValidation } from "@/maestro/validation-record"
 import { readPlanRevision } from "@/maestro/plan-revision"
-import { readContext } from "@/maestro/context-record"
+import { contextIsCurrent, readContext } from "@/maestro/context-record"
 import { Database } from "@opencode-ai/core/database/database"
 import * as Tool from "./tool"
 
@@ -59,6 +59,7 @@ export const MaestroRecordValidationTool = Tool.define(
     const database = yield* Database.Service
     const events = yield* EventV2Bridge.Service
     const agents = yield* Agent.Service
+    const git = yield* Git.Service
     return {
       description: "Record validation evidence for one routed work card. Maestro only.",
       parameters: ValidationParameters,
@@ -85,6 +86,7 @@ export const MaestroRecordValidationTool = Tool.define(
           const context = yield* readContext(params.contextRecordID)
           if (!plan || !context || context.planRevisionID !== plan.id || context.contextHash !== params.contextHash)
             return yield* Effect.fail(new Error("Validation context does not match PlanRevision"))
+          if (!(yield* contextIsCurrent(context))) return yield* Effect.fail(new Error("Validation context is stale"))
           const sessionRow = yield* database.db
             .select()
             .from(SessionTable)
@@ -108,6 +110,7 @@ export const MaestroRecordValidationTool = Tool.define(
           Effect.provideService(Database.Service, database),
           Effect.provideService(EventV2Bridge.Service, events),
           Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Git.Service, git),
           Effect.orDie,
         ),
     }
@@ -121,6 +124,7 @@ export const MaestroRecordReviewTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     const agents = yield* Agent.Service
     const git = yield* Git.Service
+    const sessions = yield* Session.Service
     return {
       description: "Record cold review evidence for one validation record. Lucy only.",
       parameters: ReviewParameters,
@@ -146,7 +150,9 @@ export const MaestroRecordReviewTool = Tool.define(
           if (agent?.id !== "lucy" || agent.native !== true) {
             return yield* Effect.fail(new Error("Review recording requires Lucy"))
           }
-          const record = yield* recordReview({ ...params, sessionID: ctx.sessionID, reviewerID: "lucy" })
+          const child = yield* sessions.get(SessionID.make(ctx.sessionID))
+          if (!child.parentID) return yield* Effect.fail(new Error("Review recording requires Lucy child session"))
+          const record = yield* recordReview({ ...params, sessionID: child.parentID, reviewerID: "lucy" })
           return {
             title: `Review ${record.verdict}`,
             metadata: { reviewReceiptID: record.id, verdict: record.verdict },
@@ -157,6 +163,7 @@ export const MaestroRecordReviewTool = Tool.define(
           Effect.provideService(EventV2Bridge.Service, events),
           Effect.provideService(Git.Service, git),
           Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Session.Service, sessions),
           Effect.orDie,
         ),
     }

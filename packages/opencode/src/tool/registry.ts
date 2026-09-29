@@ -91,7 +91,6 @@ export interface Interface {
     modelID: ModelV2.ID
     agent: Agent.Info
     permission?: PermissionV1.Ruleset
-    includeDenied?: boolean
   }) => Effect.Effect<Tool.Def[]>
 }
 
@@ -355,7 +354,7 @@ const layer = Layer.effect(
           return false
         }
         if (
-          !input.includeDenied &&
+          Permission.disabled([tool.id], input.agent.permission).has(tool.id) ||
           Permission.disabled([tool.id], Permission.merge(input.agent.permission, input.permission ?? [])).has(tool.id)
         ) {
           return false

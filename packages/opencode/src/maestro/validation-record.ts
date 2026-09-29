@@ -15,6 +15,7 @@ import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { lookupRouteGrant } from "./route-grant"
 import { lookupRosterMember, nativeProfiles, roster, type RosterMember } from "./roster"
+import { readContext } from "./context-record"
 
 type Check = { id: string; status: "PASS" | "FAIL" | "HOLD"; detail: string }
 type ValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.Recorded.data>
@@ -82,7 +83,7 @@ export function validationRecordHash(record: ValidationData) {
   return hash(record)
 }
 
-function cardHash(workCard: string) {
+export function workCardHash(workCard: string) {
   return createHash("sha256").update(workCard, "utf8").digest("hex")
 }
 
@@ -142,7 +143,7 @@ function validation(input: RecordValidationInput): Omit<ValidationData, "actor">
     projectID,
     workCardID,
     workCard,
-    workCardHash: cardHash(workCard),
+    workCardHash: workCardHash(workCard),
     routedMemberID: member.member.memberId,
     rosterHash: hash(roster),
     grantHash: hash(grant.grant),
@@ -300,7 +301,7 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
   const trusted = yield* resolveSession(input.sessionID, record.projectID).pipe(
     Effect.mapError((error) => new ReviewRejectedError({ reason: error.reason })),
   )
-  if (typeof input.workCard !== "string" || cardHash(input.workCard) !== record.workCardHash) {
+  if (typeof input.workCard !== "string" || workCardHash(input.workCard) !== record.workCardHash) {
     return yield* new ReviewRejectedError({ reason: "work-card-mismatch" })
   }
   const artifact = yield* requireArtifact(
@@ -309,6 +310,12 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
     trusted.session.directory,
     trusted.session.directory,
   )
+  if (record.contextRecordID) {
+    const context = yield* readContext(record.contextRecordID)
+    if (!context || context.contextHash !== record.contextHash || artifact.headSHA !== context.headSHA) {
+      return yield* new ReviewRejectedError({ reason: "artifact-context-mismatch" })
+    }
+  }
   const checks = yield* Effect.try({
     try: () => requireChecks(input.checks),
     catch: () => new ReviewRejectedError({ reason: "malformed-check-evidence" }),

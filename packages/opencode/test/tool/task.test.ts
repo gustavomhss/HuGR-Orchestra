@@ -27,6 +27,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2 } from "@opencode-ai/core/event"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
+import { authorizationTaskIntentHash } from "@/maestro/authorization"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -190,29 +191,39 @@ describe("tool.task", () => {
           reviewPolicyHash: "d".repeat(64),
           actor: { version: "rfc8785-v1", bytes: "actor", sha256: "e".repeat(64) },
           reviewerID: "lucy",
-          taskIntentHash: "f".repeat(64),
+          taskIntentHash: authorizationTaskIntentHash({ subagentType: "charlie", prompt: "implement card" }),
           methodVersion: "authorization-v1",
         },
         { id: authorizationID },
       )
       const tool = yield* TaskTool
       const def = yield* tool.init()
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "maestro",
+        agentID: "maestro",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps() },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
       const result = yield* def.execute(
         { description: "implement card", prompt: "implement card", subagent_type: "charlie", authorizationID },
-        {
-          sessionID: chat.id,
-          messageID: assistant.id,
-          agent: "build",
-          abort: new AbortController().signal,
-          extra: { promptOps: stubOps() },
-          messages: [],
-          metadata: () => Effect.void,
-          ask: () => Effect.void,
-        },
+        context,
       )
       const child = (yield* (yield* Session.Service).children(chat.id))[0]
       expect(child?.agent).toBe("charlie")
       expect(result.metadata.sessionId).toBe(child?.id)
+      const changed = yield* Effect.exit(
+        def.execute(
+          { description: "different", prompt: "different work", subagent_type: "charlie", authorizationID },
+          context,
+        ),
+      )
+      expect(Exit.isFailure(changed)).toBe(true)
+      if (Exit.isFailure(changed)) expect(Cause.pretty(changed.cause)).toContain("task-intent-mismatch")
     }),
   )
 

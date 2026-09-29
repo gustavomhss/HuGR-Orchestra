@@ -4,6 +4,7 @@ import { EventTable } from "@opencode-ai/core/event/sql"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
+import path from "node:path"
 import { eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -56,13 +57,8 @@ export const recordContext = Effect.fn("MaestroContext.record")(function* (planR
   if (!plan || plan.sessionID !== sessionID) return yield* new ContextConflictError({ sessionID, planRevisionID })
   const sessions = yield* Session.Service
   const session = yield* sessions.get(SessionID.make(sessionID))
-  const git = yield* Git.Service
-  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: session.directory })
-  if (head.exitCode !== 0) return yield* new ContextConflictError({ sessionID, planRevisionID })
-  const headSHA = head.text().trim()
-  const branch = (yield* git.branch(session.directory)) ?? "DETACHED"
-  const changedPaths = (yield* git.status(session.directory)).map((item) => item.file).sort()
-  const evidence = { directory: session.directory, branch, headSHA, changedPaths }
+  const evidence = yield* currentEvidence(session.directory)
+  if (!evidence) return yield* new ContextConflictError({ sessionID, planRevisionID })
   const next: ContextData = {
     id: id(sessionID, planRevisionID),
     sessionID,
@@ -70,9 +66,9 @@ export const recordContext = Effect.fn("MaestroContext.record")(function* (planR
     projectID: session.projectID,
     directory: session.directory,
     mode: "UNGROUNDED",
-    branch,
-    headSHA,
-    changedPaths,
+    branch: evidence.branch,
+    headSHA: evidence.headSHA,
+    changedPaths: evidence.changedPaths,
     currentEvidenceIdentityHash: hash(evidence),
     contextHash: hash({ planRevisionID, evidence }),
     status: "CURRENT",
@@ -80,9 +76,38 @@ export const recordContext = Effect.fn("MaestroContext.record")(function* (planR
   }
   const existing = yield* readContext(next.id)
   if (existing) {
-    if (isDeepStrictEqual(existing, next)) return existing
+    if (isDeepStrictEqual({ ...existing, createdAt: 0 }, { ...next, createdAt: 0 })) return existing
     return yield* new ContextConflictError({ sessionID, planRevisionID })
   }
   const events = yield* EventV2Bridge.Service
   return (yield* events.publish(MaestroEvent.Context.Recorded, next, { id: EventV2.ID.make(next.id) })).data
+})
+
+export const contextIsCurrent = Effect.fn("MaestroContext.isCurrent")(function* (context: ContextData) {
+  const evidence = yield* currentEvidence(context.directory)
+  return !!evidence && context.currentEvidenceIdentityHash === hash(evidence)
+})
+
+const currentEvidence = Effect.fn("MaestroContext.currentEvidence")(function* (directory: string) {
+  const git = yield* Git.Service
+  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: directory })
+  if (head.exitCode !== 0) return undefined
+  const diff = yield* git.run(["diff", "--binary", "HEAD", "--", "."], { cwd: directory })
+  const untracked = yield* git.run(["ls-files", "--others", "--exclude-standard", "-z"], { cwd: directory })
+  if (diff.exitCode !== 0 || diff.truncated || untracked.exitCode !== 0) return undefined
+  const untrackedFiles = yield* Effect.forEach(
+    untracked.text().split("\0").filter(Boolean).sort(),
+    (file) =>
+      Effect.promise(() => Bun.file(path.join(directory, file)).arrayBuffer()).pipe(
+        Effect.map((bytes) => ({ file, sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex") })),
+      ),
+  )
+  return {
+    directory,
+    branch: (yield* git.branch(directory)) ?? "DETACHED",
+    headSHA: head.text().trim(),
+    changedPaths: (yield* git.status(directory)).map((item) => item.file).sort(),
+    diffSHA256: createHash("sha256").update(diff.stdout).digest("hex"),
+    untrackedFiles,
+  }
 })

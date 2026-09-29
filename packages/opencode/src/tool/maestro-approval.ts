@@ -62,7 +62,18 @@ export const MaestroPresentApprovalTool = Tool.define(
           if (plan.sessionID !== ctx.sessionID || validation.sessionID !== ctx.sessionID || context.sessionID !== ctx.sessionID)
             return yield* Effect.fail(new Error("Approval presentation session mismatch"))
           if (validation.outcome !== "VALID") return yield* Effect.fail(new Error("Approval presentation requires VALID validation"))
-          if (context.planRevisionID !== plan.id) return yield* Effect.fail(new Error("Approval context revision mismatch"))
+          if (
+            validation.planRevisionID !== plan.id ||
+            validation.contextRecordID !== context.id ||
+            validation.contextHash !== context.contextHash ||
+            context.planRevisionID !== plan.id
+          ) {
+            return yield* Effect.fail(new Error("Approval evidence chain mismatch"))
+          }
+          const session = yield* sessions.get(ctx.sessionID)
+          if (plan.sessionID !== session.id || validation.projectID !== session.projectID || context.projectID !== session.projectID) {
+            return yield* Effect.fail(new Error("Approval project binding mismatch"))
+          }
           const review = yield* findReview(ctx.sessionID, validation.id)
           if (!review || review.data.verdict !== "APPROVE") return yield* Effect.fail(new Error("Approval presentation requires Lucy APPROVE"))
           const presentation = yield* presentApprovalFromSession({

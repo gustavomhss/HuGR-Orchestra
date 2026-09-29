@@ -121,9 +121,16 @@ it.instance("native team enforces runtime writes, task bypass, and durable Maest
     const charlie = yield* agents.get("charlie")
     const file = path.join(directory, "native-team.txt")
 
-    const deniedWrite = yield* executeWrite(lucy, file, "Lucy must not write").pipe(Effect.exit)
-    expect(Exit.isFailure(deniedWrite)).toBe(true)
-    if (Exit.isFailure(deniedWrite)) expect(Cause.pretty(deniedWrite.cause)).toContain("PermissionDeniedError")
+    const lucyTools = yield* SessionTools.resolve({
+      agent: lucy,
+      model,
+      session,
+      processor,
+      bypassAgentCheck: true,
+      messages: [],
+      promptOps,
+    })
+    expect(lucyTools.write).toBeUndefined()
     expect(yield* Effect.promise(() => fs.exists(file))).toBe(false)
 
     yield* executeWrite(charlie, file, "Charlie wrote this")

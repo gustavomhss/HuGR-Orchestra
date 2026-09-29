@@ -2,14 +2,14 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { MessageV2 } from "@/session/message-v2"
-import { SessionID } from "@/session/schema"
 import { readValidation, type ReviewReceipt } from "./validation-record"
+import { recordApproval } from "./approval-record"
+import { readPlanRevision } from "./plan-revision"
+import { readContext } from "./context-record"
 
 export class AuthorizationRejectedError extends Schema.TaggedErrorClass<AuthorizationRejectedError>()(
   "MaestroAuthorizationRejected",
@@ -28,8 +28,8 @@ function hash(value: string) {
   return createHash("sha256").update(value, "utf8").digest("hex")
 }
 
-function messageText(message: SessionV1.WithParts) {
-  return message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("").trim().toLowerCase()
+export function authorizationTaskIntentHash(input: { subagentType: string; prompt: string; model?: string }) {
+  return hash(`${input.subagentType}\0${input.prompt}\0${input.model ?? ""}`)
 }
 
 function eventID(input: AuthorizationInput) {
@@ -53,17 +53,37 @@ export const grantAuthorization = Effect.fn("MaestroAuthorization.grant")(functi
   if (!validation) return yield* new AuthorizationRejectedError({ reason: "validation-not-found" })
   if (validation.sessionID !== input.sessionID) return yield* new AuthorizationRejectedError({ reason: "session-mismatch" })
   if (validation.outcome !== "VALID") return yield* new AuthorizationRejectedError({ reason: "validation-not-valid" })
+  if (!validation.planRevisionID || !validation.contextRecordID || !validation.contextHash) {
+    return yield* new AuthorizationRejectedError({ reason: "validation-unbound" })
+  }
+  const plan = yield* readPlanRevision(validation.planRevisionID)
+  const context = yield* readContext(validation.contextRecordID)
+  if (
+    !plan ||
+    !context ||
+    plan.sessionID !== input.sessionID ||
+    context.sessionID !== input.sessionID ||
+    context.planRevisionID !== plan.id ||
+    context.contextHash !== validation.contextHash ||
+    context.projectID !== validation.projectID
+  ) {
+    return yield* new AuthorizationRejectedError({ reason: "validation-evidence-mismatch" })
+  }
   const review = yield* findReview(input.sessionID, input.validationRecordID, validation.workCardHash)
   if (!review || review.verdict !== "APPROVE") return yield* new AuthorizationRejectedError({ reason: "review-not-approved" })
-  const messages = yield* MessageV2.stream(SessionID.make(input.sessionID))
-  const message = messages.find((candidate) => candidate.info.id === input.approvalMessageID)
-  if (!message || message.info.role !== "user") return yield* new AuthorizationRejectedError({ reason: "reply-not-direct-user" })
-  if (message.parts.some((part) => "synthetic" in part && part.synthetic === true)) {
-    return yield* new AuthorizationRejectedError({ reason: "reply-synthetic" })
+  const approval = yield* recordApproval(input.sessionID)
+  if (approval.status !== "APPROVED") return yield* new AuthorizationRejectedError({ reason: "approval-not-current" })
+  if (
+    approval.decision.approvalMessageID !== input.approvalMessageID ||
+    approval.decision.validationRecordID !== input.validationRecordID ||
+    approval.decision.actor.projectId !== validation.projectID ||
+    approval.decision.validationHash === "" ||
+    approval.decision.policyHash !== validation.reviewPolicyHash
+  ) {
+    return yield* new AuthorizationRejectedError({ reason: "approval-binding-mismatch" })
   }
-  if (messageText(message) !== "approve" && messageText(message) !== "aprovo") {
-    return yield* new AuthorizationRejectedError({ reason: "reply-not-approval" })
-  }
+  const presentation = yield* findPresentation(input.sessionID, approval.decision.presentationID)
+  if (!presentation) return yield* new AuthorizationRejectedError({ reason: "presentation-not-found" })
   const wanted = {
     sessionID: input.sessionID,
     projectID: validation.projectID,
@@ -76,7 +96,7 @@ export const grantAuthorization = Effect.fn("MaestroAuthorization.grant")(functi
     reviewPolicyHash: validation.reviewPolicyHash,
     actor: validation.actor,
     reviewerID: "lucy" as const,
-    taskIntentHash: hash(`${validation.workCardHash}\0${validation.routedMemberID}`),
+    taskIntentHash: authorizationTaskIntentHash(presentation.intent),
     methodVersion: "authorization-v1",
   }
   const id = eventID(input)
@@ -87,6 +107,23 @@ export const grantAuthorization = Effect.fn("MaestroAuthorization.grant")(functi
     Effect.map((event) => ({ id: event.id, ...event.data })),
   )
 })
+
+function findPresentation(sessionID: string, presentationID: string) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const rows = yield* db
+      .select({ type: EventTable.type, data: EventTable.data })
+      .from(EventTable)
+      .where(eq(EventTable.aggregate_id, sessionID))
+      .orderBy(asc(EventTable.seq))
+      .all()
+      .pipe(Effect.orDie)
+    return rows
+      .filter((row) => row.type === EventV2.versionedType(MaestroEvent.Approval.Presented.type, 1))
+      .map((row) => Schema.decodeUnknownSync(MaestroEvent.Approval.Presented.data)(row.data))
+      .find((row) => row.id === presentationID)
+  })
+}
 
 function findReview(sessionID: string, validationRecordID: string, workCardHash: string) {
   return Effect.gen(function* () {

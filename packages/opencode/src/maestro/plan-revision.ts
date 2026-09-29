@@ -67,7 +67,7 @@ export const recordPlanRevision = Effect.fn("MaestroPlanRevision.record")(functi
   const next = wanted(input)
   const existing = yield* readPlanRevision(next.id)
   if (existing) {
-    if (isDeepStrictEqual(existing, next)) return existing
+    if (isDeepStrictEqual({ ...existing, createdAt: 0 }, { ...next, createdAt: 0 })) return existing
     return yield* new PlanRevisionConflictError(input)
   }
   const events = yield* EventV2Bridge.Service

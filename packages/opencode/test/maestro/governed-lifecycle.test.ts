@@ -303,7 +303,7 @@ describe("Maestro governed lifecycle", () => {
         })
         const altered = yield* Effect.exit(def.execute(input, context))
         expect(Exit.isFailure(altered)).toBe(true)
-        expect(prompts).toBe(2)
+        expect(prompts).toBe(1)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
         yield* database.db
           .delete(EventTable)
@@ -319,7 +319,7 @@ describe("Maestro governed lifecycle", () => {
         const recovered = yield* def.execute(input, context)
         expect(recovered.metadata.sessionId).toBe(first.metadata.sessionId)
         expect((yield* sessions.get(first.metadata.sessionId)).permission).toEqual(child.permission)
-        expect(prompts).toBe(3)
+        expect(prompts).toBe(2)
         expect(yield* sessions.children(chat.id)).toHaveLength(1)
       }),
     { config: { agent: { maestro: { name: "Conductor" } } } },
