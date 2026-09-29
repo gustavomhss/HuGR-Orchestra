@@ -14,11 +14,10 @@ Turn one durable user message in a Maestro session into exactly one safe next st
 ```text
 ORIENT          answer/inspect; no plan and no child work
 CLARIFY         identify one blocking decision for `clarify-decision`; no child work
-READY_TO_DRAFT  hand bounded intent to `resolve-scope`; no child work
+READY_TO_DRAFT  hand bounded intent to `draft-plan`; no child work
 ```
 
-`READY_TO_DRAFT` is not `PLAN_DRAFT`. It is an internal admission result; `resolve-scope` must first create an
-immutable `ScopeProposal`; `draft-plan` alone can then present a
+`READY_TO_DRAFT` is not `PLAN_DRAFT`. It is an internal admission result; `draft-plan` alone can present a
 versioned `PLAN_DRAFT` to stakeholder.
 
 This method does not plan, approve, decompose, route, dispatch, mutate product files, or write Atlas facts.
@@ -74,8 +73,8 @@ reason              short user-visible explanation
 ```
 
 For `READY_TO_DRAFT`, assessment produces `PlanIntent`: goal, known facts, proposals, unknowns, and uncertainty.
-`PlanIntent` is neither scope nor plan; `resolve-scope` must create canonical proposed scope before `draft-plan`
-or any Atlas pack retrieval.
+`PlanIntent` is neither scope nor plan; `draft-plan` must create canonical proposed scope before any Atlas pack
+retrieval.
 
 This skill may understand language; it may not create a plan, call a task tool, mutate state beyond its
 assessment record, or label an assumption as stakeholder fact.
@@ -102,7 +101,7 @@ response stating outcome and why:
 ```text
 ORIENT:          answer or current state
 CLARIFY:         blocking decision, why it blocks, next owner `clarify-decision`
-READY_TO_DRAFT:  intent summary, known facts, visible uncertainty, next owner `resolve-scope`
+READY_TO_DRAFT:  intent summary, known facts, visible uncertainty, next owner `draft-plan`
 ```
 
 ## Skills
@@ -122,7 +121,7 @@ the smallest question.
 | `atlas-orientation-read`           | read compact project orientation                                    | Atlas read only                 |
 | `maestro-admission-record`         | persist method result keyed to message                              | OpenCode durable event/metadata |
 | `admission-schema-guard`           | reject malformed assessment/result                                  | before record                   |
-| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
+| `no-governed-task-before-approval` | deny Task/child Session creation without approved revision identity | Session/Task boundary           |
 
 No shell, edit, write, external network, Atlas write, or member tool is granted to this method.
 
@@ -136,7 +135,7 @@ approval. Stakeholder answers clarification and approves any later plan revision
 The durable `AdmissionRecord` is evidence and output. It contains method/version, input IDs, orientation
 references/freshness, `IntentAssessment`, `PlanIntent` when ready, deterministic outcome,
 `ClarificationNeed` when blocked, user-visible response, timestamp, and next method owner. `ORIENT` has no
-next owner; `CLARIFY` invokes `clarify-decision`; `READY_TO_DRAFT` invokes `resolve-scope` only after this
+next owner; `CLARIFY` invokes `clarify-decision`; `READY_TO_DRAFT` invokes `draft-plan` only after this
 record commits.
 
 Same `(sessionId, messageId, methodVersion)` returns recorded output. A new method version is a deliberate
@@ -171,15 +170,13 @@ is unobservable, active work could be changed, or assessment fails validation. I
 2. “Make it better” records `CLARIFY` plus one `ClarificationNeed`; `clarify-decision` asks one outcome
    question, and neither method creates a child Session.
 3. “Add dark mode to settings” records `READY_TO_DRAFT` with source-labeled `PlanIntent` and orientation
-   references, names `resolve-scope` as next owner, and creates no child Session before a later exact plan approval.
+   references, but creates no child Session before a later exact plan approval.
 4. An invalid/partial `IntentAssessment` falls back to `CLARIFY`; it never reaches `READY_TO_DRAFT` or Task
    creation.
 5. Replaying one message ID returns byte-identical recorded outcome and does not call `frame-request` again.
 6. A request that could alter active approved work returns `CLARIFY` rather than silently steering or widening
    the current plan.
 7. `UN-SEEDED` orientation is rendered visibly and never becomes a guessed project constraint.
-8. `draft-plan` cannot start from `READY_TO_DRAFT`: it requires committed `RESOLVED` `ScopeProposal` from
-   `resolve-scope`.
 
 ## Anti-Overengineering Boundary
 

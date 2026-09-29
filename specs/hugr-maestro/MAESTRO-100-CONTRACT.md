@@ -12,30 +12,6 @@ orchestrates a fixed team, turns approved work into bounded Relay runs, keeps
 GitHub Project current, selects sufficient verification efficiently, integrates
 only proven work, and recovers honestly from failure.
 
-## Current Team-First Execution Profile
-
-`ROADMAP.md` "Revised Team-First Execution Plan" is the controlling execution
-profile for Waves 0 through 3 and supersedes conflicting lifecycle wording in
-this contract during those waves. It uses an immutable work card and one
-`ValidationRecord`; it does not introduce `PlanRevision`, a Maestro-owned
-`ContextRecord`, or a separate eligibility projection. Direct approval creates
-one `AuthorizationGranted` event bound to immutable card, roster, grant,
-review-policy, validation, and task-intent hashes. Task dispatch uses a narrow
-atomic reservation keyed by that authorization; this is not a general writer
-framework.
-
-Atlas owns context when Atlas is enabled: it issues a scoped, freshness-
-verifiable receipt and Maestro stores only its issuer, identity, and hash. The
-initial team-first path is Atlas-free. Team is runtime authority from Wave 1:
-typed roster, scoped grants, routed seat, and independent review replace any
-Markdown-only role claim.
-
-For Waves 0 through 3, later references in this document to `PlanRevision`,
-`ContextRecord`, `ELIGIBLE_FOR_EXECUTION`, RelayRun bindings, or Atlas snapshot
-fields are future-profile material only. They are non-executable: no packet,
-schema, reader, or Task fence may consume them until a later profile explicitly
-replaces the team-first profile.
-
 ## Definition of Done
 
 - A source-cited trace matrix maps every named Maestro surface to owner, state
@@ -193,29 +169,15 @@ agent until this exception's owner/interface/check conditions are frozen.
 ## Lifecycle
 
 ```text
-Authority  admit-request -> resolve-scope -> draft-plan (persist PROPOSED revision with PENDING ContextRecord)
-           -> assemble-context (first ContextRecord) -> validate-plan (VALID)
-            -> request-approval presentation -> direct user reply -> atomically durable ApprovalDecision + ELIGIBLE_FOR_EXECUTION
-            -> later Task/child Session
-Slice      compile immutable Work Packages and Relay runs only from current `ELIGIBLE_FOR_EXECUTION`
-Delegate   route seat -> grant tools -> create or resume governed Runner after current-eligibility Task/child Session fence
+Frame      orient -> admit -> clarify
+Ground     resolve scope -> inspect Atlas capability -> assemble context
+Contract   draft -> validate -> present -> direct user approval -> revise
+Slice      compile immutable Work Packages and Relay runs
+Delegate   route seat -> grant tools -> create or resume governed Runner
 Verify     gate -> cold review -> CI evidence
 Reconcile  compare plan, context, result, Project, PR, and target SHA
 Close      merge verification -> provenance -> memory -> outcome
 ```
-
-`approval-eligibility-write` is one authoritative serialized transaction: re-read current evidence identity/hash,
-then persist durable `ApprovalDecision` and `ELIGIBLE_FOR_EXECUTION` only when it equals validated ContextRecord
-evidence. Changed/unavailable evidence is `HOLD`; neither decision nor eligibility writes. Policy revision is a
-lifecycle-fence generation: policy change atomically supersedes eligibility; all lifecycle/admission writers
-serialize; Task admission compares exact policy revision/hash. Task/child Session fence is one authoritative
-serialized Task-admission transaction under same fence: live-read evidence; verify current `ELIGIBLE_FOR_EXECUTION`;
-first atomically persist `RESERVED` admission row with idempotency key, deterministic child ID, decision/validation/
-ContextRecord/evidence/policy hashes; create or resume only bound child; atomically mark row `CREATED`. Post-create
-receipt failure leaves `RESERVED`/creating recovery; retry resumes only reserved child, never creates another.
-Supersession/revision change serializes against admission: it either supersedes before reservation and denies/no
-child, or reservation/receipt wins and later supersession cannot retroactively authorize another child. Never check
-then separately `sessions.create`.
 
 Every transition has one durable input set, one durable output event or
 receipt, one owning actor, and named `HOLD`, `CANCELLED`, `SUPERSEDED`, and
@@ -426,7 +388,7 @@ may guide behavior or test cases; it is never a V2 runtime dependency.
 
 ## Internal Abilities
 
-Use built-in abilities only:
+Start with built-in abilities, not an external marketplace:
 
 ```text
 repository, github, tests, ci, relay, atlas
@@ -436,7 +398,9 @@ An ability declares only `id`, summary, required configuration, allowed seats,
 and tools. The core derives availability from real configuration and health.
 An ability proposes operations through the core; only core adapters execute
 repository, GitHub, CI, Task, or Atlas effects. CLI and MCP expose the same
-small filtered inventory.
+small filtered inventory. Do not build a graph database, custom web navigator,
+third-party sandbox, or plugin marketplace until multiple built-in abilities
+prove a common missing seam.
 
 ## Program Trace
 
@@ -491,15 +455,11 @@ file makes WPs sequential unless the lead creates one explicit integration WP.
 
 ## First Execution Wave
 
-The #181 row below is superseded for execution sequencing by the current
-team-first profile: #181 is a Wave 0 native Task-resume prerequisite, not a
-later M1.1 implementation dispatch.
-
 | WP        | Owner                             | Status  | Reason                                                                  |
 | --------- | --------------------------------- | ------- | ----------------------------------------------------------------------- |
-| #184 M0.1 | lead                              | delivered | contract source and evidence receipt delivered                        |
-| #187 M0.2 | Jimmy-style read-only research    | delivered | baseline evidence receipt delivered                                   |
-| #183 M0.3 | Charlie-style pure parser         | delivered | pure validator delivered; no runtime wiring                           |
+| #184 M0.1 | lead                              | review  | contract source and evidence commit/PR pending                          |
+| #187 M0.2 | Jimmy-style read-only research    | review  | evidence record accepted; commit/PR pending                             |
+| #183 M0.3 | Charlie-style pure parser         | blocked | wait for M0.1/M0.2 commit plus bootstrap packet                         |
 | #181 M1.1 | Charlie-style focused test        | blocked | needs current baseline evidence from #187                               |
 | #182 M1.2 | Charlie-style pure model          | blocked | needs exact Relay contract from #184                                    |
 | #185 M2.1 | Charlie-style schema/fold         | blocked | needs lifecycle transition table from #184                              |
@@ -507,7 +467,7 @@ later M1.1 implementation dispatch.
 | #191 M5.1 | Charlie-style pure planner        | blocked | needs risk/verification contract from #184                              |
 | #198 M6.1 | Charlie-style pure registry       | blocked | needs ability boundary from #184                                        |
 | #200 M7.1 | Charlie-style pure provider       | blocked | needs Atlas mode contract from #184                                     |
-| #206 M0.4 | lead                              | running | conflict map and legacy normalization in progress                       |
+| #206 M0.4 | lead                              | blocked | normalizes legacy items and freezes conflict map after #184, #187, #183 |
 
 No implementation agent is dispatched until its row changes from `blocked` to
 `ready` through a lead-owned contract update.

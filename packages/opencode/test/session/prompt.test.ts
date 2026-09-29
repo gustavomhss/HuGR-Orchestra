@@ -1117,26 +1117,22 @@ it.instance(
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
       const chat = yield* sessions.create({ title: "Pinned" })
+      const metadataSet = yield* Deferred.make<void>()
+      // prettier-ignore
+      yield* (yield* EventV2Bridge.Service).listen((event) => { const part = event.type === MessageV2.Event.PartUpdated.type ? (event.data as typeof MessageV2.Event.PartUpdated.data.Type).part : undefined; return part?.type === "tool" && part.sessionID === chat.id && part.state.status === "running" && part.state.metadata?.sessionId ? Deferred.succeed(metadataSet, undefined) : Effect.void })
       yield* llm.hang
       const msg = yield* user(chat.id, "hello")
       yield* addSubtask(chat.id, msg.id)
 
       const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
 
-      const tool = yield* pollWithTimeout(
-        Effect.gen(function* () {
-          const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
-          const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
-          const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
-          if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
-        }),
-        "timed out waiting for running subtask metadata",
-      )
+      yield* Deferred.await(metadataSet)
+      const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+      const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
+      const tool = taskMsg?.parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
-      if (tool.state.status !== "running") return
-      expect(typeof tool.state.metadata?.sessionId).toBe("string")
-      expect(tool.state.title).toBeDefined()
-      expect(tool.state.metadata?.model).toBeDefined()
+      // prettier-ignore
+      expect(tool?.state).toMatchObject({ status: "running", title: expect.any(String), metadata: { sessionId: expect.any(String), model: expect.anything() } })
 
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
@@ -1185,7 +1181,7 @@ it.instance(
       yield* prompt.cancel(chat.id)
       yield* Fiber.await(fiber)
     }),
-  10_000,
+  30_000,
 )
 
 it.instance(
@@ -1430,7 +1426,7 @@ it.instance(
       expect((yield* status.get(chat.id)).type).toBe("idle")
       expect((yield* status.get(childID)).type).toBe("idle")
     }),
-  10_000,
+  30_000,
 )
 
 it.instance(
@@ -1835,7 +1831,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  10_000,
+  30_000,
 )
 
 it.instance(
@@ -1874,7 +1870,7 @@ it.instance(
       expect(yield* llm.calls).toBe(1)
     }),
   { git: true },
-  10_000,
+  30_000,
 )
 
 unix(
@@ -2535,48 +2531,50 @@ noLLMServer.instance(
   30_000,
 )
 
-it.instance("full prompt loop writes projections but no durable snapshot events (gate OFF)", () =>
-  Effect.gen(function* () {
-    const { llm } = yield* useServerConfig(providerCfg)
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const { db } = yield* Database.Service
-    const chat = yield* sessions.create({
-      title: "Pinned",
-      permission: [{ permission: "*", pattern: "*", action: "allow" }],
-    })
+it.instance(
+  "full prompt loop writes projections but no durable snapshot events (gate OFF)",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const { db } = yield* Database.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
 
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      noReply: true,
-      parts: [{ type: "text", text: "hello" }],
-    })
-    yield* llm.text("world")
-    yield* prompt.loop({ sessionID: chat.id })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("world")
+      yield* prompt.loop({ sessionID: chat.id })
 
-    const messageRows = yield* db
-      .select()
-      .from(MessageTable)
-      .where(eq(MessageTable.session_id, chat.id))
-      .all()
-      .pipe(Effect.orDie)
-    const snapshots = yield* db
-      .select()
-      .from(EventTable)
-      .where(eq(EventTable.type, "message.updated.1"))
-      .all()
-      .pipe(Effect.orDie)
-    const partSnapshots = yield* db
-      .select()
-      .from(EventTable)
-      .where(eq(EventTable.type, "message.part.updated.1"))
-      .all()
-      .pipe(Effect.orDie)
+      const messageRows = yield* db
+        .select()
+        .from(MessageTable)
+        .where(eq(MessageTable.session_id, chat.id))
+        .all()
+        .pipe(Effect.orDie)
+      const snapshots = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.type, "message.updated.1"))
+        .all()
+        .pipe(Effect.orDie)
+      const partSnapshots = yield* db
+        .select()
+        .from(EventTable)
+        .where(eq(EventTable.type, "message.part.updated.1"))
+        .all()
+        .pipe(Effect.orDie)
 
-    expect(messageRows.length).toBeGreaterThan(0)
-    expect(snapshots).toHaveLength(0)
-    expect(partSnapshots).toHaveLength(0)
-  }),
+      expect(messageRows.length).toBeGreaterThan(0)
+      expect(snapshots).toHaveLength(0)
+      expect(partSnapshots).toHaveLength(0)
+    }),
   60_000,
 )

@@ -15390,6 +15390,18 @@
             "$ref": "#/components/schemas/EventSessionNextRevertCommitted"
           },
           {
+            "$ref": "#/components/schemas/EventMaestroApprovalPresented"
+          },
+          {
+            "$ref": "#/components/schemas/EventMaestroApprovalDecided"
+          },
+          {
+            "$ref": "#/components/schemas/EventMaestroApprovalConsumed"
+          },
+          {
+            "$ref": "#/components/schemas/EventMaestroAdmissionDecided"
+          },
+          {
             "$ref": "#/components/schemas/EventMessagePartDelta"
           },
           {
@@ -19027,6 +19039,371 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["maestro.approval.presented"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "sessionID": {
+                        "type": "string"
+                      },
+                      "assistantMessageID": {
+                        "type": "string"
+                      },
+                      "callID": {
+                        "type": "string"
+                      },
+                      "planRevisionID": {
+                        "type": "string"
+                      },
+                      "validationRecordID": {
+                        "type": "string"
+                      },
+                      "projectID": {
+                        "type": "string"
+                      },
+                      "memberID": {
+                        "type": "string"
+                      },
+                      "revisionHash": {
+                        "type": "string"
+                      },
+                      "validationHash": {
+                        "type": "string"
+                      },
+                      "contextHash": {
+                        "type": "string"
+                      },
+                      "policyHash": {
+                        "type": "string"
+                      },
+                      "taskHash": {
+                        "type": "string"
+                      },
+                      "intent": {
+                        "type": "object",
+                        "properties": {
+                          "subagentType": {
+                            "type": "string"
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "taskID": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["subagentType", "prompt"],
+                        "additionalProperties": false
+                      },
+                      "methodVersion": {
+                        "type": "string"
+                      },
+                      "plan": {
+                        "type": "string"
+                      },
+                      "provenance": {
+                        "type": "string"
+                      },
+                      "assumptions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "validationLedger": {
+                        "type": "string"
+                      },
+                      "contextState": {
+                        "type": "string",
+                        "enum": ["CURRENT"]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "sessionID",
+                      "assistantMessageID",
+                      "callID",
+                      "planRevisionID",
+                      "validationRecordID",
+                      "projectID",
+                      "memberID",
+                      "revisionHash",
+                      "validationHash",
+                      "contextHash",
+                      "policyHash",
+                      "taskHash",
+                      "intent",
+                      "methodVersion",
+                      "plan",
+                      "provenance",
+                      "assumptions",
+                      "validationLedger",
+                      "contextState"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["maestro.approval.decided"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string"
+                      },
+                      "projectID": {
+                        "type": "string"
+                      },
+                      "memberID": {
+                        "type": "string"
+                      },
+                      "presentationID": {
+                        "type": "string"
+                      },
+                      "presentationMessageID": {
+                        "type": "string"
+                      },
+                      "approvalMessageID": {
+                        "type": "string"
+                      },
+                      "planRevisionID": {
+                        "type": "string"
+                      },
+                      "validationRecordID": {
+                        "type": "string"
+                      },
+                      "revisionHash": {
+                        "type": "string"
+                      },
+                      "validationHash": {
+                        "type": "string"
+                      },
+                      "contextHash": {
+                        "type": "string"
+                      },
+                      "policyHash": {
+                        "type": "string"
+                      },
+                      "taskHash": {
+                        "type": "string"
+                      },
+                      "methodVersion": {
+                        "type": "string"
+                      },
+                      "outcome": {
+                        "type": "string",
+                        "enum": ["APPROVED", "DECLINED"]
+                      },
+                      "decisionTime": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "sessionID",
+                      "projectID",
+                      "memberID",
+                      "presentationID",
+                      "presentationMessageID",
+                      "approvalMessageID",
+                      "planRevisionID",
+                      "validationRecordID",
+                      "revisionHash",
+                      "validationHash",
+                      "contextHash",
+                      "policyHash",
+                      "taskHash",
+                      "methodVersion",
+                      "outcome",
+                      "decisionTime"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["maestro.approval.consumed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string"
+                      },
+                      "presentationID": {
+                        "type": "string"
+                      },
+                      "approvalMessageID": {
+                        "type": "string"
+                      },
+                      "taskHash": {
+                        "type": "string"
+                      },
+                      "callID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["sessionID", "presentationID", "approvalMessageID", "taskHash", "callID"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["maestro.admission.decided"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "sessionID": {
+                        "type": "string"
+                      },
+                      "messageID": {
+                        "type": "string"
+                      },
+                      "methodVersion": {
+                        "type": "string"
+                      },
+                      "outcome": {
+                        "type": "string",
+                        "enum": ["ORIENT", "CLARIFY", "READY_TO_DRAFT"]
+                      },
+                      "reason": {
+                        "type": "string",
+                        "enum": [
+                          "invalid-assessment",
+                          "missing-usable-goal",
+                          "material-blocker",
+                          "active-work-conflict"
+                        ]
+                      },
+                      "assessment": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["orient", "work"]
+                          },
+                          "goal": {
+                            "type": "string"
+                          },
+                          "known": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": ["stakeholder", "orientation"]
+                                }
+                              },
+                              "required": ["text", "source"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "proposals": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": ["maestro"]
+                                }
+                              },
+                              "required": ["text", "source"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "unknowns": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "uncertainty": {
+                            "type": "string"
+                          },
+                          "activeWorkEffect": {
+                            "type": "string",
+                            "enum": ["none", "new-scope-or-revision"]
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "known",
+                          "proposals",
+                          "unknowns",
+                          "uncertainty",
+                          "activeWorkEffect",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["sessionID", "messageID", "methodVersion", "outcome"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["message.part.delta"]
                   },
                   "properties": {
@@ -20523,6 +20900,18 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextRevertCommitted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventMaestroApprovalPresented"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventMaestroApprovalDecided"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventMaestroApprovalConsumed"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventMaestroAdmissionDecided"
               }
             ]
           }
@@ -22520,6 +22909,9 @@
       "Agent": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -24140,6 +24532,18 @@
           },
           {
             "$ref": "#/components/schemas/SessionNextRevertCommitted"
+          },
+          {
+            "$ref": "#/components/schemas/MaestroApprovalPresented"
+          },
+          {
+            "$ref": "#/components/schemas/MaestroApprovalDecided"
+          },
+          {
+            "$ref": "#/components/schemas/MaestroApprovalConsumed"
+          },
+          {
+            "$ref": "#/components/schemas/MaestroAdmissionDecided"
           },
           {
             "$ref": "#/components/schemas/MessagePartDelta"
@@ -27013,6 +27417,442 @@
                   }
                 },
                 "required": ["timestamp", "sessionID", "messageID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventMaestroApprovalPresented": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["maestro.approval.presented.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "assistantMessageID": {
+                    "type": "string"
+                  },
+                  "callID": {
+                    "type": "string"
+                  },
+                  "planRevisionID": {
+                    "type": "string"
+                  },
+                  "validationRecordID": {
+                    "type": "string"
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "memberID": {
+                    "type": "string"
+                  },
+                  "revisionHash": {
+                    "type": "string"
+                  },
+                  "validationHash": {
+                    "type": "string"
+                  },
+                  "contextHash": {
+                    "type": "string"
+                  },
+                  "policyHash": {
+                    "type": "string"
+                  },
+                  "taskHash": {
+                    "type": "string"
+                  },
+                  "intent": {
+                    "type": "object",
+                    "properties": {
+                      "subagentType": {
+                        "type": "string"
+                      },
+                      "prompt": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "taskID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["subagentType", "prompt"],
+                    "additionalProperties": false
+                  },
+                  "methodVersion": {
+                    "type": "string"
+                  },
+                  "plan": {
+                    "type": "string"
+                  },
+                  "provenance": {
+                    "type": "string"
+                  },
+                  "assumptions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "validationLedger": {
+                    "type": "string"
+                  },
+                  "contextState": {
+                    "type": "string",
+                    "enum": ["CURRENT"]
+                  }
+                },
+                "required": [
+                  "id",
+                  "sessionID",
+                  "assistantMessageID",
+                  "callID",
+                  "planRevisionID",
+                  "validationRecordID",
+                  "projectID",
+                  "memberID",
+                  "revisionHash",
+                  "validationHash",
+                  "contextHash",
+                  "policyHash",
+                  "taskHash",
+                  "intent",
+                  "methodVersion",
+                  "plan",
+                  "provenance",
+                  "assumptions",
+                  "validationLedger",
+                  "contextState"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventMaestroApprovalDecided": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["maestro.approval.decided.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "projectID": {
+                    "type": "string"
+                  },
+                  "memberID": {
+                    "type": "string"
+                  },
+                  "presentationID": {
+                    "type": "string"
+                  },
+                  "presentationMessageID": {
+                    "type": "string"
+                  },
+                  "approvalMessageID": {
+                    "type": "string"
+                  },
+                  "planRevisionID": {
+                    "type": "string"
+                  },
+                  "validationRecordID": {
+                    "type": "string"
+                  },
+                  "revisionHash": {
+                    "type": "string"
+                  },
+                  "validationHash": {
+                    "type": "string"
+                  },
+                  "contextHash": {
+                    "type": "string"
+                  },
+                  "policyHash": {
+                    "type": "string"
+                  },
+                  "taskHash": {
+                    "type": "string"
+                  },
+                  "methodVersion": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": ["APPROVED", "DECLINED"]
+                  },
+                  "decisionTime": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "sessionID",
+                  "projectID",
+                  "memberID",
+                  "presentationID",
+                  "presentationMessageID",
+                  "approvalMessageID",
+                  "planRevisionID",
+                  "validationRecordID",
+                  "revisionHash",
+                  "validationHash",
+                  "contextHash",
+                  "policyHash",
+                  "taskHash",
+                  "methodVersion",
+                  "outcome",
+                  "decisionTime"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventMaestroApprovalConsumed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["maestro.approval.consumed.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "presentationID": {
+                    "type": "string"
+                  },
+                  "approvalMessageID": {
+                    "type": "string"
+                  },
+                  "taskHash": {
+                    "type": "string"
+                  },
+                  "callID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["sessionID", "presentationID", "approvalMessageID", "taskHash", "callID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventMaestroAdmissionDecided": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["maestro.admission.decided.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "sessionID": {
+                    "type": "string"
+                  },
+                  "messageID": {
+                    "type": "string"
+                  },
+                  "methodVersion": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": ["ORIENT", "CLARIFY", "READY_TO_DRAFT"]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": ["invalid-assessment", "missing-usable-goal", "material-blocker", "active-work-conflict"]
+                  },
+                  "assessment": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["orient", "work"]
+                      },
+                      "goal": {
+                        "type": "string"
+                      },
+                      "known": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["stakeholder", "orientation"]
+                            }
+                          },
+                          "required": ["text", "source"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "proposals": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": ["maestro"]
+                            }
+                          },
+                          "required": ["text", "source"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "unknowns": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "uncertainty": {
+                        "type": "string"
+                      },
+                      "activeWorkEffect": {
+                        "type": "string",
+                        "enum": ["none", "new-scope-or-revision"]
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "known", "proposals", "unknowns", "uncertainty", "activeWorkEffect", "reason"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["sessionID", "messageID", "methodVersion", "outcome"],
                 "additionalProperties": false
               }
             },
@@ -31483,6 +32323,446 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "MaestroApprovalPresented": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.presented"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "assistantMessageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "planRevisionID": {
+                "type": "string"
+              },
+              "validationRecordID": {
+                "type": "string"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "memberID": {
+                "type": "string"
+              },
+              "revisionHash": {
+                "type": "string"
+              },
+              "validationHash": {
+                "type": "string"
+              },
+              "contextHash": {
+                "type": "string"
+              },
+              "policyHash": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "intent": {
+                "type": "object",
+                "properties": {
+                  "subagentType": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "taskID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["subagentType", "prompt"],
+                "additionalProperties": false
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "string"
+              },
+              "provenance": {
+                "type": "string"
+              },
+              "assumptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "validationLedger": {
+                "type": "string"
+              },
+              "contextState": {
+                "type": "string",
+                "enum": ["CURRENT"]
+              }
+            },
+            "required": [
+              "id",
+              "sessionID",
+              "assistantMessageID",
+              "callID",
+              "planRevisionID",
+              "validationRecordID",
+              "projectID",
+              "memberID",
+              "revisionHash",
+              "validationHash",
+              "contextHash",
+              "policyHash",
+              "taskHash",
+              "intent",
+              "methodVersion",
+              "plan",
+              "provenance",
+              "assumptions",
+              "validationLedger",
+              "contextState"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "MaestroApprovalDecided": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.decided"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "memberID": {
+                "type": "string"
+              },
+              "presentationID": {
+                "type": "string"
+              },
+              "presentationMessageID": {
+                "type": "string"
+              },
+              "approvalMessageID": {
+                "type": "string"
+              },
+              "planRevisionID": {
+                "type": "string"
+              },
+              "validationRecordID": {
+                "type": "string"
+              },
+              "revisionHash": {
+                "type": "string"
+              },
+              "validationHash": {
+                "type": "string"
+              },
+              "contextHash": {
+                "type": "string"
+              },
+              "policyHash": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": ["APPROVED", "DECLINED"]
+              },
+              "decisionTime": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "sessionID",
+              "projectID",
+              "memberID",
+              "presentationID",
+              "presentationMessageID",
+              "approvalMessageID",
+              "planRevisionID",
+              "validationRecordID",
+              "revisionHash",
+              "validationHash",
+              "contextHash",
+              "policyHash",
+              "taskHash",
+              "methodVersion",
+              "outcome",
+              "decisionTime"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "MaestroApprovalConsumed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.consumed"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "presentationID": {
+                "type": "string"
+              },
+              "approvalMessageID": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "presentationID", "approvalMessageID", "taskHash", "callID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "MaestroAdmissionDecided": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.admission.decided"]
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string"
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": ["ORIENT", "CLARIFY", "READY_TO_DRAFT"]
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["invalid-assessment", "missing-usable-goal", "material-blocker", "active-work-conflict"]
+              },
+              "assessment": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["orient", "work"]
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "known": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": ["stakeholder", "orientation"]
+                        }
+                      },
+                      "required": ["text", "source"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "proposals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": ["maestro"]
+                        }
+                      },
+                      "required": ["text", "source"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknowns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainty": {
+                    "type": "string"
+                  },
+                  "activeWorkEffect": {
+                    "type": "string",
+                    "enum": ["none", "new-scope-or-revision"]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "known", "proposals", "unknowns", "uncertainty", "activeWorkEffect", "reason"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["sessionID", "messageID", "methodVersion", "outcome"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "MessagePartDelta": {
         "type": "object",
         "properties": {
@@ -35424,6 +36704,358 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMaestroApprovalPresented": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.presented"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string"
+              },
+              "assistantMessageID": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "planRevisionID": {
+                "type": "string"
+              },
+              "validationRecordID": {
+                "type": "string"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "memberID": {
+                "type": "string"
+              },
+              "revisionHash": {
+                "type": "string"
+              },
+              "validationHash": {
+                "type": "string"
+              },
+              "contextHash": {
+                "type": "string"
+              },
+              "policyHash": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "intent": {
+                "type": "object",
+                "properties": {
+                  "subagentType": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "taskID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["subagentType", "prompt"],
+                "additionalProperties": false
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "plan": {
+                "type": "string"
+              },
+              "provenance": {
+                "type": "string"
+              },
+              "assumptions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "validationLedger": {
+                "type": "string"
+              },
+              "contextState": {
+                "type": "string",
+                "enum": ["CURRENT"]
+              }
+            },
+            "required": [
+              "id",
+              "sessionID",
+              "assistantMessageID",
+              "callID",
+              "planRevisionID",
+              "validationRecordID",
+              "projectID",
+              "memberID",
+              "revisionHash",
+              "validationHash",
+              "contextHash",
+              "policyHash",
+              "taskHash",
+              "intent",
+              "methodVersion",
+              "plan",
+              "provenance",
+              "assumptions",
+              "validationLedger",
+              "contextState"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMaestroApprovalDecided": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.decided"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "projectID": {
+                "type": "string"
+              },
+              "memberID": {
+                "type": "string"
+              },
+              "presentationID": {
+                "type": "string"
+              },
+              "presentationMessageID": {
+                "type": "string"
+              },
+              "approvalMessageID": {
+                "type": "string"
+              },
+              "planRevisionID": {
+                "type": "string"
+              },
+              "validationRecordID": {
+                "type": "string"
+              },
+              "revisionHash": {
+                "type": "string"
+              },
+              "validationHash": {
+                "type": "string"
+              },
+              "contextHash": {
+                "type": "string"
+              },
+              "policyHash": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": ["APPROVED", "DECLINED"]
+              },
+              "decisionTime": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "sessionID",
+              "projectID",
+              "memberID",
+              "presentationID",
+              "presentationMessageID",
+              "approvalMessageID",
+              "planRevisionID",
+              "validationRecordID",
+              "revisionHash",
+              "validationHash",
+              "contextHash",
+              "policyHash",
+              "taskHash",
+              "methodVersion",
+              "outcome",
+              "decisionTime"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMaestroApprovalConsumed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.approval.consumed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "presentationID": {
+                "type": "string"
+              },
+              "approvalMessageID": {
+                "type": "string"
+              },
+              "taskHash": {
+                "type": "string"
+              },
+              "callID": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "presentationID", "approvalMessageID", "taskHash", "callID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventMaestroAdmissionDecided": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["maestro.admission.decided"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string"
+              },
+              "methodVersion": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": ["ORIENT", "CLARIFY", "READY_TO_DRAFT"]
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["invalid-assessment", "missing-usable-goal", "material-blocker", "active-work-conflict"]
+              },
+              "assessment": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["orient", "work"]
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "known": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": ["stakeholder", "orientation"]
+                        }
+                      },
+                      "required": ["text", "source"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "proposals": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": ["maestro"]
+                        }
+                      },
+                      "required": ["text", "source"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "unknowns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "uncertainty": {
+                    "type": "string"
+                  },
+                  "activeWorkEffect": {
+                    "type": "string",
+                    "enum": ["none", "new-scope-or-revision"]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": ["kind", "known", "proposals", "unknowns", "uncertainty", "activeWorkEffect", "reason"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["sessionID", "messageID", "methodVersion", "outcome"],
             "additionalProperties": false
           }
         },

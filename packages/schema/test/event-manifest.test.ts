@@ -9,8 +9,8 @@ import { WorkspaceEvent } from "../src/workspace-event"
 
 describe("public event manifest", () => {
   test("owns the complete public event surface", () => {
-    expect(EventManifest.ServerDefinitions.length).toBe(72)
-    expect(EventManifest.Definitions.length).toBe(102)
+    expect(EventManifest.ServerDefinitions.length).toBe(74)
+    expect(EventManifest.Definitions.length).toBe(104)
     expect(SessionV1.Event.Definitions).toEqual([
       SessionV1.Event.Created,
       SessionV1.Event.Updated,
@@ -23,8 +23,8 @@ describe("public event manifest", () => {
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
-    expect(EventManifest.Latest.size).toBe(100)
-    expect(EventManifest.Durable.size).toBe(49)
+    expect(EventManifest.Latest.size).toBe(102)
+    expect(EventManifest.Durable.size).toBe(51)
   })
 
   test("uses canonical definitions for current public events", () => {
@@ -39,6 +39,8 @@ describe("public event manifest", () => {
     expect(EventManifest.Latest.get("maestro.approval.consumed")).toBe(MaestroEvent.Approval.ConsumedV2)
     expect(EventManifest.Latest.get("maestro.approval.reserved")).toBe(MaestroEvent.Approval.ReservedV2)
     expect(EventManifest.Latest.get("maestro.admission.decided")).toBe(MaestroEvent.Admission.Decided)
+    expect(EventManifest.Latest.get("maestro.plan_revision.recorded")).toBe(MaestroEvent.PlanRevision.Recorded)
+    expect(EventManifest.Latest.get("maestro.context.recorded")).toBe(MaestroEvent.Context.Recorded)
     expect(EventManifest.Latest.get("maestro.clarification.decided")).toBe(MaestroEvent.Clarification.Decided)
     expect(EventManifest.Latest.get("maestro.scope.decided")).toBe(MaestroEvent.Scope.Decided)
     expect(EventManifest.Latest.get("maestro.held.entered")).toBe(MaestroEvent.Held.Entered)
@@ -54,13 +56,15 @@ describe("public event manifest", () => {
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(EventManifest.Latest.has("ide.installed")).toBe(false)
     expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
-    expect(EventManifest.Definitions.slice(57, 60)).toEqual([
+    expect(EventManifest.Definitions.slice(59, 62)).toEqual([
       SessionV1.Event.PartDelta,
       SessionV1.Event.Diff,
       SessionV1.Event.Error,
     ])
     expect(EventManifest.Durable.has("session.next.step.ended.1")).toBe(false)
     expect(EventManifest.Durable.get("session.next.step.ended.2")).toBe(SessionEvent.Step.Ended)
+    expect(EventManifest.Durable.get("maestro.plan_revision.recorded.1")).toBe(MaestroEvent.PlanRevision.Recorded)
+    expect(EventManifest.Durable.get("maestro.context.recorded.1")).toBe(MaestroEvent.Context.Recorded)
     expect(EventManifest.Durable.get("maestro.validation.recorded.1")).toBe(MaestroEvent.Validation.Recorded)
     expect(EventManifest.Durable.get("maestro.review.received.1")).toBe(MaestroEvent.Review.Received)
     expect(EventManifest.Durable.get("maestro.authorization.granted.1")).toBe(MaestroEvent.Authorization.Granted)

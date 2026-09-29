@@ -19,12 +19,9 @@ Status: deterministic kernel and durable record writer implemented; automatic pe
 `maestro.admission.decided` event keyed by `(sessionID, messageID, methodVersion)` into EventV2's existing Session
 aggregate. It does not use Session metadata or a new table. Automatic invocation after one user message is still absent.
 
-Historical delivery behavior, not current V2 authority: `TaskTool` accepted an explicit `governed` binding only from
-Maestro and, before `sessions.create`, required matching parent Session/project identity plus one exact persisted
-`maestro.approval.decided` event. Current contract requires exact current `ELIGIBLE_FOR_EXECUTION` projection bound
-to decision, immutable revision, `VALID` validation, ContextRecord, and current-evidence hash; absent, superseded,
-or mismatched projection denies before child creation. Normal Tasks bypass this flow. Approval presentation/decision
-writer from real Session messages remains next missing lifecycle seam.
+`TaskTool` now accepts an explicit `governed` binding only from Maestro. Before `sessions.create`, it requires matching
+parent Session/project identity and one exact persisted `maestro.approval.decided` event. Normal Tasks bypass this flow.
+Approval presentation/decision writer from real Session messages remains next missing lifecycle seam.
 
 V1 source paths cited by `v1-portability-register.md` are absent from this checkout. Historic test counts remain reported
 evidence, but no V1 source-level invariant is treated as re-verified here.
@@ -62,6 +59,4 @@ Runtime acceptance written; blocked locally by missing workspace dependencies:
 
 1. Same `(sessionID, messageID, methodVersion)` replays byte-identical durable result without invoking `frame-request`.
 2. Altered input for same admission key refuses rather than overwriting durable result.
-3. Historical delivery acceptance, not current V2 authority: governed Task attempts without approved revision identity
-   deny before `sessions.create`; one exact approval event permits. Current Task fence requires exact current
-   `ELIGIBLE_FOR_EXECUTION` projection.
+3. Governed Task attempts without approved revision identity deny before `sessions.create`; one exact approval event permits.

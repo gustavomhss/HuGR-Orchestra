@@ -410,6 +410,8 @@ export const Definitions = Event.inventory(
   Approval.ReservedV2,
   Approval.ConsumedV2,
   Admission.Decided,
+  PlanRevision.Recorded,
+  Context.Recorded,
   Clarification.Decided,
   Scope.Decided,
   Held.Entered,

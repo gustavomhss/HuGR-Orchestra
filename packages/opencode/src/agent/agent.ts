@@ -311,7 +311,6 @@ const layer = Layer.effect(
           if (roster.some((member) => member.memberId === key && member.nativeProfile)) {
             const item = agents[key]
             if (value.model) item.model = Provider.parseModel(value.model)
-            item.name = value.name ?? item.name
             item.variant = value.variant ?? item.variant
             item.temperature = value.temperature ?? item.temperature
             continue

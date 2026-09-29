@@ -88,7 +88,7 @@ const live: Layer.Layer<
         modelID: input.model.id,
         "session.id": input.sessionID,
         small: (input.small ?? false).toString(),
-        agent: input.agent.name,
+        agent: input.agent.id ?? input.agent.name,
         mode: input.agent.mode,
       })
 
@@ -262,7 +262,7 @@ const live: Layer.Layer<
           modelID: input.model.id,
           "session.id": input.sessionID,
           small: (input.small ?? false).toString(),
-          agent: input.agent.name,
+          agent: input.agent.id ?? input.agent.name,
           mode: input.agent.mode,
           reason: native.reason,
         })
@@ -285,7 +285,7 @@ const live: Layer.Layer<
                 modelID: input.model.id,
                 "session.id": input.sessionID,
                 small: (input.small ?? false).toString(),
-                agent: input.agent.name,
+                agent: input.agent.id ?? input.agent.name,
                 mode: input.agent.mode,
                 error,
               }),

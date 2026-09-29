@@ -14,8 +14,9 @@ before deterministic plan validation. Context cannot be assembled from an admitt
 accepts a `Territory`, and territory does not exist until `draft-plan` proposes canonical scope.
 
 ```text
-READY      bound `GROUNDED` or `UNGROUNDED` ContextRecord; next owner validate-plan
-HOLD       scope, capability, Atlas seam, context evidence, or freshness is unverified
+READY      bound Atlas context result; next owner validate-plan
+UN-SEEDED  only explicit future Atlas context-envelope declaration permits this result
+HOLD       scope, Atlas seam, context evidence, or freshness is unverified
 ```
 
 This method retrieves and binds context. It does not infer scope, draft/revise a plan, write Atlas, approve, or
@@ -24,42 +25,28 @@ create child work.
 ## Trigger
 
 Committed `PlanRevision` is `PROPOSED` with canonical scope and `PENDING` context requirement, or a previously
-bound result became stale. `UN-SEEDED` provider declaration is orientation-only and emits `HOLD` unless independent
-`ABSENT` or `BOOTSTRAP` capability evidence completes an ungrounded binding.
+bound result became stale.
 
 ## Inputs
 
 ```text
 planRevisionId       immutable proposed revision identity + content hash
-scopeProposalId       immutable historical ScopeProposal identity + content hash retained by revision
-canonicalScope        immutable mode-dependent scope/boundaries/anchors from PlanRevision ScopeProposal
-scopeMode             immutable `GROUNDED` or `UNGROUNDED` mode from PlanRevision ScopeProposal
-scopeEvidence         historical trusted scope evidence retained by PlanRevision ScopeProposal
-currentCapabilityMemoryRecord trusted current capability/memory record identity + hash
-currentRepositoryInspectionRecord trusted current repository inspection record identity + hash
-currentInspectionReceipt immutable current inspection receipt identity + canonical content hash; UNGROUNDED only
-anchorVerificationReceiptId stored immutable anchor-verification receipt identity + hash from ScopeProposal; UNGROUNDED only
-orientationRef        current Atlas Awareness/Orientation reference; UN-SEEDED is orientation-only
+canonicalScope        typed territory identifiers and explicit exclusions from revision
+orientationRef        current Atlas Awareness/Orientation reference or explicit future unseeded declaration
 atlasEnvelopeVersion  frozen current-Atlas adapter contract version; absent until foundation corpus ratifies
 methodVersion         version of this contract
 ```
 
 An admitted `PlanIntent`, prose goal, broad repository path, or V1 territory format is not valid scope input.
-`UNGROUNDED` is valid only with independently proven `ABSENT` or `BOOTSTRAP` capability plus complete receipt and SHA.
 
 ## Preconditions
 
-1. Revision and its ScopeProposal are committed, immutable, linked, and have matching historical scope identity/content.
-2. `GROUNDED` stored territory identifiers, or `UNGROUNDED` stored boundaries/direct-user anchors, revalidate against
-   current trusted capability/inspection evidence. A SHA or evidence receipt change alone does not require new
-   ScopeProposal or revision.
-3. `UNGROUNDED` stored boundaries have non-empty exact `ABSENT` or `BOOTSTRAP` current capability/memory evidence and
-   same-current-SHA inspection receipt; every path and optional symbol revalidates with stored anchor-verification
-   receipt and resolved path/anchor relation. A symbol-only anchor resolves to exactly one current receipt path.
+1. Revision is committed, immutable, `PROPOSED`, and has canonical non-empty scope.
+2. Every scope identifier resolves through current Atlas territory identity seam.
+3. Current Atlas context-envelope adapter/version is ratified and test-measured.
 
 Failure emits `HOLD` with durable reason. An uncovered/malformed current Atlas lookup is `HOLD`, never silently
-treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases. An explicit
-`UN-SEEDED` declaration also holds unless independent ABSENT/BOOTSTRAP evidence satisfies ungrounded requirements.
+treated as `UN-SEEDED`: current `BoundedPack` empty result is total and cannot distinguish those cases.
 
 ## Candidate Current-Atlas Evidence
 
@@ -90,101 +77,56 @@ freeze, not foundation source evidence.
 
 ## Procedure After Seam Freeze
 
-1. `context-request-schema-guard` validates exact revision hash, immutable ScopeProposal identity/content, and
-   mode-dependent stored scope/boundaries/anchors.
-2. For `GROUNDED`, read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current
-   Atlas proves. For `UNGROUNDED`, bind no Atlas envelope or source.
-3. `context-envelope-guard` reads current trusted capability-memory and repository-inspection evidence. It preserves
-   historical ScopeProposal identity and revalidates its stored mode, boundaries, direct-user anchors, and resolved
-   paths against current evidence. It does not require current evidence identity/hash/SHA to equal historical scope
-    evidence: only same-mode non-scope evidence change creates linked ContextRecord. `GROUNDED` catalog version
-    change changes ScopeProposal evidence and requires `resolve-scope` plus `revise-plan`. It holds if stored
-    mode/boundaries/anchors no longer validate, or if requested scope changes; those require `resolve-scope` plus
-    `revise-plan` as appropriate.
-    On changed current evidence, run one lifecycle-fenced atomic context-revocation transaction: persist linked
-    immutable `ContextRecord` and replace old eligibility with `SUPERSEDED_FOR_EXECUTION` together. Failure rolls
-    neither forward; recovery resumes same idempotent transaction, never leaves old eligibility/new context split. It
-    never trusts raw anchor input, performs no live scan or scope re-resolution, and does not recreate V1 pack protocol.
-4. Atomic transaction binds `ContextRecord` to same revision hash and historical ScopeProposal. `validate-plan`
-   receives record identity only after both context persistence and eligibility supersession commit.
+1. `context-request-schema-guard` validates exact revision hash and canonical scope.
+2. Read current Atlas context envelope through frozen adapter. Adapter exposes only evidence current Atlas proves.
+3. `context-envelope-guard` checks envelope version, scope identity, snapshot/address, freshness, truncation
+   receipt, and configured budget evidence. It does not recreate V1 pack protocol.
+4. Persist immutable `ContextRecord` bound to revision hash. `validate-plan` receives record identity only.
 
 ## Tools and Guards
 
 | Capability                         | Purpose                                                    | Boundary                       |
 | ---------------------------------- | ---------------------------------------------------------- | ------------------------------ |
 | `plan-revision-read`               | read exact proposed revision and canonical scope           | Maestro durable evidence read  |
-| `scope-proposal-read`              | read immutable scope identity/content bound to revision    | Maestro durable evidence read  |
-| `inspection-receipt-read`          | read immutable exact-SHA receipt; UNGROUNDED only          | Maestro durable evidence read  |
-| `anchor-verification-receipt-read` | read stored immutable anchor verification; UNGROUNDED only | Maestro durable evidence read  |
-| `capability-memory-read`           | read current trusted capability/memory identity             | bounded adapter read           |
-| `repository-inspection-read`       | read current trusted inspection identity                    | bounded adapter read           |
 | `atlas-context-envelope-read`      | frozen adapter over measured current Atlas seam            | Atlas read only                |
-| `context-revocation-write`         | lifecycle-fenced atomic linked ContextRecord persistence + `SUPERSEDED_FOR_EXECUTION` replacement | one durable transaction |
-| `context-request-schema-guard`     | require exact revision/historical ScopeProposal links       | before Atlas read              |
-| `context-envelope-guard`           | revalidate stored scope against current trusted evidence; reject invalid mode/boundary/anchor | before persistence |
-| `no-governed-task-before-approval` | require exact current `ELIGIBLE_FOR_EXECUTION` bound to same decision, revision, current VALID validation, ContextRecord, and current-evidence identity/hash; absent/superseded/mismatched denies before child creation | Session/Task boundary |
+| `context-record-write`             | persist immutable bound result                             | Maestro durable evidence write |
+| `context-request-schema-guard`     | reject prose, broad, or uncanonical scope                  | before Atlas read              |
+| `context-envelope-guard`           | require measured adapter/version and envelope evidence     | before persistence             |
+| `no-governed-task-before-approval` | deny Task/child Session without approved revision identity | Session/Task boundary          |
 
-No model skill, shell, live scan, scope re-resolution, product edit, Atlas write, member tool, approval, or task
-creation is granted.
+No model skill, shell, product edit, Atlas write, member tool, approval, or task creation is granted.
 
 ## Authority
 
-Maestro binds evidence; it cannot choose scope, promote retrieved text into stakeholder fact, map empty pack or
-`UN-SEEDED` orientation to ungrounded context, waive stale context, or invent current-Atlas adapter fields.
+Maestro binds Atlas evidence; it cannot choose scope, promote retrieved text into stakeholder fact, map empty
+pack to `UN-SEEDED`, waive stale context, or invent current-Atlas adapter fields.
 
 ## Evidence, Output, and Idempotence
 
-`ContextRecord` mode is exactly `GROUNDED` or `UNGROUNDED`. It stores revision hash, canonical scope, mode, result,
-ScopeProposal identity/content hash, trusted capability-memory and repository-inspection record identities+hashes,
-timestamp, and next owner. `GROUNDED` stores Atlas adapter/version, envelope address/snapshot, and
-freshness/truncation/budget evidence plus current envelope/catalog identities+hashes defined by frozen seam.
-`UNGROUNDED` stores exact ABSENT/BOOTSTRAP capability/memory receipt identity+hash, current repository-inspection
-record identity+hash, current inspection SHA, immutable current inspection-receipt identity+canonical content hash, and bound
-`InspectionBoundary` list, stored anchor-verification receipt identity+hash, plus exclusions; it contains no Atlas source.
-`UNGROUNDED` also stores every resolved path/anchor relation.
+`ContextRecord` stores revision hash, canonical scope, Atlas adapter/version, envelope address/snapshot,
+freshness/truncation/budget evidence defined by frozen seam, result, timestamp, and next owner.
 
-Deduplication key is `(planRevisionId, scopeMode, currentEvidenceIdentityHash, methodVersion)`. Canonical complete
-`currentEvidenceIdentityHash` is GROUNDED capability identity/hash plus current envelope identity/hash plus catalog
-identity/hash; UNGROUNDED capability/memory receipt identity/hash plus current repository-inspection record
-identity/hash plus inspection SHA plus immutable inspection-receipt identity+canonical content hash plus
-anchor-verification receipt identity/hash. Replay returns stored record only for exact complete current evidence. Any
-changed record or receipt content, including same inspection SHA, creates linked ContextRecord and never replays or
-replaces prior plan evidence.
+Deduplication key is `(planRevisionId, atlasEnvelopeVersion, methodVersion)`. Replay returns stored record;
+new Atlas evidence creates linked result and never replaces prior plan evidence.
 
 ## Refusal and Recovery
 
 | Condition                                                    | Result                                                   |
 | ------------------------------------------------------------ | -------------------------------------------------------- |
 | Non-canonical/empty scope                                    | `HOLD`; no broad lookup or plan/task                     |
-| Atlas adapter unratified for GROUNDED                        | `HOLD`; no direct foundation import from Maestro runtime |
+| Atlas adapter unratified                                     | `HOLD`; no direct foundation import from Maestro runtime |
 | Empty/uncovered/malformed current Atlas pack                 | `HOLD`; never mislabel as unseeded                       |
 | Stale, mismatched, provenance-free, or receipt-free envelope | `HOLD`; preserve reason/evidence                         |
-| UN-SEEDED provider declaration without independent ABSENT/BOOTSTRAP evidence | `HOLD`; preserve declaration identity |
-| UNGROUNDED without complete capability/memory receipt and inspection SHA | `HOLD`; no context binding                         |
-| Empty, glob, directory, repository-wide, or SHA-unbound InspectionBoundary | `HOLD`; no broad fallback                      |
-| Missing/mismatched historical ScopeProposal or its stored inspection-receipt identity/content | `HOLD`; no re-resolution or live scan |
-| Same-mode non-scope SHA/evidence receipt change with same valid stored scope/boundaries/anchors | linked ContextRecord refresh; no new ScopeProposal/revision |
-| GROUNDED catalog version change | `HOLD`; resolve-scope + revise-plan required |
-| context-revocation transaction failure | `HOLD`; neither linked ContextRecord nor supersession commits; idempotent recovery resumes transaction |
-| Stored mode/boundaries/anchors no longer validate or requested scope changes | `HOLD`; resolve-scope + revise-plan as appropriate |
-| Missing/mismatched stored anchor-verification receipt or broad receipt anchor | `HOLD`; request clarification, no enumeration |
-| Missing/mismatched resolved path/anchor relation or ambiguous symbol-only anchor | `HOLD`; no context binding                 |
+| Explicit future Atlas unseeded declaration                   | `UN-SEEDED`; preserve declaration identity               |
 | Duplicate trigger                                            | return stored record                                     |
 
 ## Acceptance After Ratification
 
-1. Canonical `GROUNDED` revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
+1. Canonical revision scope yields `READY` record bound to exact revision and measured current Atlas envelope.
 2. V1-shaped territory/pack input is refused; current foundation adapter is only reader.
 3. Empty/uncovered result holds, never fabricates context or unseeded state.
-4. Same-mode non-scope SHA/evidence refresh with same valid stored scope/boundaries/anchors requires atomic linked
-   new ContextRecord persistence plus old-eligibility supersession before validation, not ScopeProposal/revision.
-   Failure commits neither and recovery resumes same idempotent transaction. GROUNDED catalog version change, changed
-   requested scope, or invalid stored mode/boundary/anchor holds for resolve-scope + revise-plan as appropriate.
+4. Stale context, changed scope, or changed adapter version requires new linked record before validation.
 5. No result of this method can create a child Session or Task.
-6. `UN-SEEDED` declaration holds unless independent ABSENT/BOOTSTRAP capability with complete ungrounded evidence
-   and bounded `InspectionBoundary` scope produces `UNGROUNDED` ContextRecord; that record contains
-   ScopeProposal and inspection-receipt identities, capability/memory receipt, inspection SHA, boundaries/exclusions,
-   and no Atlas source.
 
 ## Anti-Overengineering Boundary
 
