@@ -153,8 +153,31 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...items.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
-function reconcileFetched<T extends { id: string }>(
-  fetched: T[],
+/**
+ * Drop part tombstones that can no longer affect anything.
+ *
+ * A `message.part.removed` tombstone is only consulted through `reconcileFetched`, which
+ * applies it as `const item = live.get(id); if (item) result.set(id, item)`. An entry
+ * whose part is absent from the store therefore has no effect on any reconcile outcome,
+ * so removing it cannot change behaviour; it only stops the map growing for the lifetime
+ * of the session. Tombstones for parts still in the store are kept, as is every message
+ * the caller did not report as covered.
+ */
+export function pruneDeadPartTombstones(
+  pending: Map<string, Set<string>>,
+  livePartIDs: (messageID: string) => ReadonlySet<string>,
+  covered: ReadonlySet<string>,
+) {
+  for (const [messageID, parts] of pending) {
+    if (!covered.has(messageID)) continue
+    const live = livePartIDs(messageID)
+    for (const partID of parts) if (!live.has(partID)) parts.delete(partID)
+    if (parts.size === 0) pending.delete(messageID)
+  }
+  return pending
+}
+
+function reconcileFetched<T extends { id: string }>(  fetched: T[],
   current: readonly T[],
   options: {
     touched?: ReadonlySet<string>
@@ -233,7 +256,7 @@ export function createServerSession(
     }
     delete cache.part[messageID]
   }
-  const seen = new Set<string>()
+const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
   const generations = new Map<string, object>()
@@ -727,6 +750,13 @@ export function createServerSession(
           if (!messageIDs.has(messageID)) setData(produce((draft) => deleteMessageParts(draft, messageID)))
         }
         orphanParts.delete(sessionID)
+      }
+      if (page.complete) {
+        const pending = pendingParts.get(sessionID)
+        if (pending) {
+          pruneDeadPartTombstones(pending, (messageID) => new Set((data.part[messageID] ?? []).map((p) => p.id)), messageIDs)
+          if (pending.size === 0) pendingParts.delete(sessionID)
+        }
       }
       setMeta("limit", sessionID, messages.length)
       setMeta("cursor", sessionID, merged.cursor)
