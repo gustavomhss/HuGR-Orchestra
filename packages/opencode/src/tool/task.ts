@@ -24,6 +24,7 @@ import { taskHash } from "@/maestro/task-hash"
 import { recordApproval } from "@/maestro/approval-record"
 import { createHash } from "node:crypto"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { reserveDispatch } from "@/maestro/dispatch"
 import { nativeProfiles, roster } from "@/maestro/roster"
 import { Permission } from "@/permission"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -82,6 +83,9 @@ const BaseParameterFields = {
     }),
   ).annotate({
     description: "Exact approval binding required only for an explicit governed Task.",
+  }),
+  authorizationID: Schema.optional(Schema.String).annotate({
+    description: "AuthorizationGranted ID for current team dispatch.",
   }),
 }
 
@@ -167,7 +171,15 @@ export const TaskTool = Tool.define(
             readonly pattern: string
             readonly action: "allow" | "deny" | "ask"
           }[]
-        | undefined
+           | undefined
+      if (params.authorizationID) {
+        const reservation = yield* reserveDispatch({ sessionID: ctx.sessionID, authorizationID: params.authorizationID })
+        if (reservation.routedMemberID !== nextID) {
+          return yield* Effect.fail(new Error("Authorized Task denied: routed-seat-mismatch"))
+        }
+        governedChildID = SessionID.make(reservation.childSessionID)
+        reservedChildPermissions = childPermissions
+      }
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
@@ -209,7 +221,7 @@ export const TaskTool = Tool.define(
         const modelRules = (parent.permission ?? []).filter(
           (rule) => rule.permission === id && rule.pattern.includes("/"),
         )
-        if (!ctx.extra?.bypassAgentCheck) {
+        if (!params.authorizationID && !ctx.extra?.bypassAgentCheck) {
           yield* ctx.ask({
             permission: id,
             patterns:
@@ -524,7 +536,7 @@ export const TaskTool = Tool.define(
         (rule) => rule.permission === id && rule.pattern.includes("/"),
       )
 
-      if (!ctx.extra?.bypassAgentCheck && !params.governed) {
+      if (!params.authorizationID && !ctx.extra?.bypassAgentCheck && !params.governed) {
         yield* ctx.ask({
           permission: id,
           patterns: modelRules.length > 0 ? [params.subagent_type, modelPattern] : [params.subagent_type],
@@ -777,7 +789,11 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        run(params, ctx).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.provideService(EventV2Bridge.Service, events),
+          Effect.orDie,
+        ),
     }
   }),
 )
