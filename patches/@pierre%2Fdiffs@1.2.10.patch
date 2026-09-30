@@ -1,0 +1,12 @@
+diff --git a/dist/managers/InteractionManager.js b/dist/managers/InteractionManager.js
+index 279a3a0..febc7ee 100644
+--- a/dist/managers/InteractionManager.js
++++ b/dist/managers/InteractionManager.js
+@@ -555,6 +555,7 @@ var InteractionManager = class {
+ 		line.numberElement.appendChild(this.gutterUtilityContainer);
+ 	}
+ 	hideUtility() {
++		if (this.gutterUtilityContainer?.matches(":focus-within")) return;
+ 		this.gutterUtilityContainer?.remove();
+ 		this.gutterUtilityLine = void 0;
+ 	}

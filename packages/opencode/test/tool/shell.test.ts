@@ -1104,8 +1104,17 @@ describe("tool.shell abort", () => {
                 )
               : Effect.void,
           )
-          const script = `const child=require("node:child_process").spawn(process.execPath,["-e",${JSON.stringify('process.on("SIGTERM",()=>{});console.log("descendant:"+process.pid);setInterval(()=>{},60000)')}],{stdio:"inherit"});child.unref()`
-          const command = `node -e ${evalarg(script)}`
+          const tmp = yield* tmpdirScoped()
+          const fs = yield* FSUtil.Service
+          yield* fs.writeWithDirs(
+            path.join(tmp, "child.cjs"),
+            'process.on("SIGTERM",()=>{});console.log("descendant:"+process.pid);setInterval(()=>{},60000)',
+          )
+          yield* fs.writeWithDirs(
+            path.join(tmp, "parent.cjs"),
+            `require("node:child_process").spawn(process.execPath,[${JSON.stringify(path.join(tmp, "child.cjs"))}],{stdio:"inherit"}).unref()`,
+          )
+          const command = `node ${quote(path.join(tmp, "parent.cjs"))}`
           const work = yield* run(
             {
               command: PS.has(sh()) ? `& ${command}` : command,
@@ -1132,9 +1141,18 @@ describe("tool.shell abort", () => {
             ),
             Effect.forkChild,
           )
-          yield* Deferred.await(seen)
+          yield* Deferred.await(seen).pipe(
+            Effect.raceFirst(
+              Fiber.join(work).pipe(
+                Effect.flatMap((result) => Effect.die(new Error(`descendant did not write its PID: ${result.output}`))),
+              ),
+            ),
+          )
           const handle = yield* Deferred.await(spawned)
-          expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+          yield* pollWithTimeout(
+            Effect.sync(() => (/^(Z|$)/.test(processState(handle.pid)) ? true : undefined)),
+            "shell leader did not exit",
+          )
           controller.abort()
           const result = yield* Fiber.join(work)
           expect(result.output).toContain("User aborted the command")
