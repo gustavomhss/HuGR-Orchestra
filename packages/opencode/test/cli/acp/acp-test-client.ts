@@ -44,7 +44,12 @@ export function createAcpClient(acp: AcpHandle): AcpClient {
       yield* acp.send(message)
 
       while (true) {
-        const received = yield* acp.receive.pipe(Effect.timeout(Duration.seconds(15)))
+        const received = yield* acp.receive.pipe(
+          Effect.timeoutOrElse({
+            duration: Duration.seconds(15),
+            orElse: () => Effect.fail(new Error(`ACP ${method} timed out\n${acp.stderr()}`)),
+          }),
+        )
         if (isJsonRpcResponse<T>(received) && received.id === id) return received
       }
     })
