@@ -7,9 +7,10 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import path from "node:path"
+import { mkdir } from "node:fs/promises"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
 import { SessionID } from "@/session/schema"
@@ -81,6 +82,9 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
   yield* Effect.promise(() => Bun.write(`${test.directory}/proof.txt`, "proof\n"))
   yield* git.run(["add", "proof.txt"], { cwd: test.directory })
   yield* git.run(["commit", "-m", "proof"], { cwd: test.directory })
+  yield* Effect.promise(() => Bun.write(`${test.directory}/proof-2.txt`, "proof 2\n"))
+  yield* git.run(["add", "proof-2.txt"], { cwd: test.directory })
+  yield* git.run(["commit", "-m", "proof 2"], { cwd: test.directory })
   const head = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
   const names = yield* git.run(
     [
@@ -114,12 +118,7 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
     ],
     { cwd: test.directory },
   )
-  const project = yield* db
-    .select()
-    .from(ProjectTable)
-    .where(eq(ProjectTable.worktree, AbsolutePath.make(test.directory)))
-    .get()
-    .pipe(Effect.orDie)
+  const project = yield* db.select().from(ProjectTable).get().pipe(Effect.orDie)
   if (!project) throw new Error("missing test project")
   yield* events.publish(
     MaestroEvent.Context.Recorded,
@@ -167,7 +166,7 @@ describe("Maestro validation receipt", () => {
         const row = yield* db.select().from(EventTable).where(eq(EventTable.id, receipt.id)).get().pipe(Effect.orDie)
 
         expect(receipt.projectID).toBe(input.projectID)
-        expect(row?.type).toBe(EventV2.versionedType(MaestroEvent.Validation.RecordedV2.type, 2))
+        expect(row?.type).toBe(EventV2.versionedType(MaestroEvent.Validation.RecordedV3.type, 3))
         expect(yield* readValidation(receipt.id)).toEqual(receipt)
         expect(receipt.actor).toEqual({
           version: "rfc8785-v1",
@@ -188,6 +187,23 @@ describe("Maestro validation receipt", () => {
 
         expect(rejected).toMatchObject({ _tag: "MaestroValidationRejected", reason: "project-mismatch" })
         expect(yield* db.select().from(EventTable).all().pipe(Effect.orDie)).toHaveLength(0)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "reads validation V2 rows without V3 baseline field",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* prepare()
+        const current = yield* recordValidation(input)
+        if (!("reviewBaseSHA" in current)) throw new Error("expected validation V3")
+        const v2 = Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV2.data)(current)
+        const id = EventV2.ID.make("evt_maestro_validation_legacy_v2")
+        const events = yield* EventV2Bridge.Service
+        yield* events.publish(MaestroEvent.Validation.RecordedV2, v2, { id })
+
+        expect(yield* readValidation(id)).toEqual({ id, ...v2 })
       }),
     { git: true },
   )
@@ -226,6 +242,35 @@ describe("Maestro validation receipt", () => {
   )
 
   it.instance(
+    "holds historical V2 retry without rewriting its durable receipt",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* prepare()
+        const current = yield* recordValidation(input)
+        const { db } = yield* Database.Service
+        const v2 = Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV2.data)(current)
+        yield* db
+          .update(EventTable)
+          .set({ type: EventV2.versionedType(MaestroEvent.Validation.RecordedV2.type, 2), data: v2 })
+          .where(eq(EventTable.id, current.id))
+          .run()
+          .pipe(Effect.orDie)
+
+        const before = yield* db.select().from(EventTable).where(eq(EventTable.id, current.id)).get().pipe(Effect.orDie)
+        expect(yield* recordValidation(input).pipe(Effect.flip)).toMatchObject({
+          _tag: "MaestroValidationConflict",
+          sessionID: input.sessionID,
+          workCardID: input.workCardID,
+        })
+        expect(
+          yield* db.select().from(EventTable).where(eq(EventTable.id, current.id)).get().pipe(Effect.orDie),
+        ).toEqual(before)
+        expect(yield* readValidation(current.id)).toEqual({ id: current.id, ...v2 })
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "binds Lucy receipt to real Git diff, root, paths, bytes, and actor",
     () =>
       Effect.gen(function* () {
@@ -253,10 +298,84 @@ describe("Maestro validation receipt", () => {
           workCardHash: validation.workCardHash,
           sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
         })
+        expect("reviewBaseSHA" in validation && validation.reviewBaseSHA).toBe(evidence.baseSHA)
+        expect(receipt.artifact.changedPaths).toEqual(["proof-2.txt", "proof.txt"])
         expect(receipt.actor.bytes).toBe(
           `{"memberId":"lucy","projectId":"${input.projectID}","sessionId":"${input.sessionID}"}`,
         )
         expect(yield* readReview(receipt.id)).toEqual(receipt)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "binds Lucy artifact to registered sandbox root",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* prepare()
+        const test = yield* TestInstance
+        const { db } = yield* Database.Service
+        const main = `${test.directory}/main-worktree`
+        yield* Effect.promise(() => mkdir(main))
+        yield* db
+          .update(ProjectTable)
+          .set({ worktree: AbsolutePath.make(main), sandboxes: [AbsolutePath.make(test.directory)] })
+          .where(eq(ProjectTable.id, input.projectID))
+          .run()
+          .pipe(Effect.orDie)
+        const validation = yield* recordValidation(input)
+        const evidence = yield* artifact()
+        const receipt = yield* recordReview({
+          sessionID: input.sessionID,
+          validationRecordID: validation.id,
+          workCard: input.workCard,
+          reviewerID: "lucy",
+          reviewMethodVersion: "review-v1",
+          verdict: "APPROVE",
+          findings: [],
+          artifact: evidence,
+          checks: input.checks,
+        })
+
+        expect(receipt.artifact.worktree).toBe(evidence.worktree)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "rejects review when bound context contains dirty paths",
+    () =>
+      Effect.gen(function* () {
+        const input = yield* prepare()
+        const validation = yield* recordValidation(input)
+        const evidence = yield* artifact()
+        const { db } = yield* Database.Service
+        const context = yield* db
+          .select()
+          .from(EventTable)
+          .where(eq(EventTable.id, EventV2.ID.make(input.contextRecordID)))
+          .get()
+          .pipe(Effect.orDie)
+        if (!context) throw new Error("missing context row")
+        yield* db
+          .update(EventTable)
+          .set({ data: { ...context.data, changedPaths: ["dirty.ts"] } })
+          .where(eq(EventTable.id, context.id))
+          .run()
+          .pipe(Effect.orDie)
+        const rejected = yield* recordReview({
+          sessionID: input.sessionID,
+          validationRecordID: validation.id,
+          workCard: input.workCard,
+          reviewerID: "lucy",
+          reviewMethodVersion: "review-v1",
+          verdict: "APPROVE",
+          findings: [],
+          artifact: evidence,
+          checks: input.checks,
+        }).pipe(Effect.flip)
+
+        expectReviewRejection(rejected, "artifact-context-mismatch")
       }),
     { git: true },
   )

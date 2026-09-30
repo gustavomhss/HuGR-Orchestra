@@ -4,7 +4,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "@/agent/agent"
 import { readPlanRevision } from "@/maestro/plan-revision"
-import { readContext } from "@/maestro/context-record"
+import { contextIsCurrent, readContext } from "@/maestro/context-record"
+import { Git } from "@/git"
 import { findReview, readValidation, validationRecordHash } from "@/maestro/validation-record"
 import { renderPresentation } from "@/maestro/approval"
 import { Session } from "@/session/session"
@@ -40,6 +41,7 @@ export const MaestroPresentApprovalTool = Tool.define(
     const events = yield* EventV2Bridge.Service
     const agents = yield* Agent.Service
     const sessions = yield* Session.Service
+    const git = yield* Git.Service
     return {
       description:
         "Unavailable until durable plan revision and validation readers exist. Refuses rather than treat model-supplied fields as approval authority.",
@@ -52,16 +54,28 @@ export const MaestroPresentApprovalTool = Tool.define(
           }
           if (!_params.planRevisionID.startsWith("evt_") || !_params.validationRecordID.startsWith("evt_")) {
             return yield* Effect.fail(
-              new Error("Approval presentation unavailable: durable plan revision and validation readers are not implemented"),
+              new Error(
+                "Approval presentation unavailable: durable plan revision and validation readers are not implemented",
+              ),
             )
           }
           const plan = yield* readPlanRevision(_params.planRevisionID)
           const validation = yield* readValidation(_params.validationRecordID)
           const context = yield* readContext(_params.contextRecordID ?? _params.contextHash)
-          if (!plan || !validation || !context) return yield* Effect.fail(new Error("Approval presentation evidence not found"))
-          if (plan.sessionID !== ctx.sessionID || validation.sessionID !== ctx.sessionID || context.sessionID !== ctx.sessionID)
+          if (!plan || !validation || !context)
+            return yield* Effect.fail(new Error("Approval presentation evidence not found"))
+          if (
+            plan.sessionID !== ctx.sessionID ||
+            validation.sessionID !== ctx.sessionID ||
+            context.sessionID !== ctx.sessionID
+          )
             return yield* Effect.fail(new Error("Approval presentation session mismatch"))
-          if (validation.outcome !== "VALID") return yield* Effect.fail(new Error("Approval presentation requires VALID validation"))
+          if (validation.outcome !== "VALID")
+            return yield* Effect.fail(new Error("Approval presentation requires VALID validation"))
+          if (!(yield* contextIsCurrent(context)))
+            return yield* Effect.fail(new Error("Approval presentation context is stale"))
+          if (context.changedPaths.length > 0)
+            return yield* Effect.fail(new Error("Approval presentation context is dirty"))
           if (
             validation.planRevisionID !== plan.id ||
             validation.contextRecordID !== context.id ||
@@ -71,11 +85,16 @@ export const MaestroPresentApprovalTool = Tool.define(
             return yield* Effect.fail(new Error("Approval evidence chain mismatch"))
           }
           const session = yield* sessions.get(ctx.sessionID)
-          if (plan.sessionID !== session.id || validation.projectID !== session.projectID || context.projectID !== session.projectID) {
+          if (
+            plan.sessionID !== session.id ||
+            validation.projectID !== session.projectID ||
+            context.projectID !== session.projectID
+          ) {
             return yield* Effect.fail(new Error("Approval project binding mismatch"))
           }
           const review = yield* findReview(ctx.sessionID, validation.id)
-          if (!review || review.data.verdict !== "APPROVE") return yield* Effect.fail(new Error("Approval presentation requires Lucy APPROVE"))
+          if (!review || review.data.verdict !== "APPROVE")
+            return yield* Effect.fail(new Error("Approval presentation requires Lucy APPROVE"))
           const presentation = yield* presentApprovalFromSession({
             sessionID: ctx.sessionID,
             assistantMessageID: ctx.messageID,
@@ -93,17 +112,24 @@ export const MaestroPresentApprovalTool = Tool.define(
             plan: plan.goal.value,
             provenance: `admission ${plan.admissionMessageID}`,
             assumptions: plan.assumptions.map((item) => item.value),
-            validationLedger: validation.checks.map((check) => `${check.id}: ${check.status} (${check.detail})`).join("\n"),
+            validationLedger: validation.checks
+              .map((check) => `${check.id}: ${check.status} (${check.detail})`)
+              .join("\n"),
             contextState: "CURRENT",
           }).pipe(
             Effect.provideService(Database.Service, database),
             Effect.provideService(EventV2Bridge.Service, events),
             Effect.provideService(Session.Service, sessions),
           )
-          return { title: "Approval presented", metadata: { presentationID: presentation.id }, output: renderPresentation(presentation) }
+          return {
+            title: "Approval presented",
+            metadata: { presentationID: presentation.id },
+            output: renderPresentation(presentation),
+          }
         }).pipe(
           Effect.provideService(Database.Service, database),
           Effect.provideService(Agent.Service, agents),
+          Effect.provideService(Git.Service, git),
           Effect.orDie,
         ),
     }

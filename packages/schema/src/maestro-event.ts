@@ -354,6 +354,42 @@ export namespace Validation {
     },
   })
   export type RecordedV2 = typeof RecordedV2.Type
+
+  export const RecordedV3 = Event.define({
+    type: "maestro.validation.recorded",
+    durable: { version: 3, aggregate: "sessionID" },
+    schema: {
+      sessionID: Schema.NonEmptyString,
+      planRevisionID: Schema.NonEmptyString,
+      contextRecordID: Schema.NonEmptyString,
+      contextHash: Schema.NonEmptyString,
+      reviewBaseSHA: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
+      projectID: Schema.NonEmptyString,
+      workCardID: Schema.NonEmptyString,
+      workCard: Schema.NonEmptyString,
+      workCardHash: Schema.NonEmptyString,
+      routedMemberID: Schema.NonEmptyString,
+      rosterHash: Schema.NonEmptyString,
+      grantHash: Schema.NonEmptyString,
+      reviewPolicyHash: Schema.NonEmptyString,
+      actor: Schema.Struct({
+        version: Schema.Literal("rfc8785-v1"),
+        bytes: Schema.NonEmptyString,
+        sha256: Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/)),
+      }),
+      validatorID: Schema.Literal("maestro"),
+      validatorVersion: Schema.NonEmptyString,
+      checks: Schema.Array(
+        Schema.Struct({
+          id: Schema.NonEmptyString,
+          status: Schema.Literals(["PASS", "FAIL", "HOLD"]),
+          detail: Schema.NonEmptyString,
+        }),
+      ).check(Schema.isMinLength(1)),
+      outcome: Schema.Literals(["VALID", "INVALID", "HOLD"]),
+    },
+  })
+  export type RecordedV3 = typeof RecordedV3.Type
 }
 
 export namespace Review {
@@ -473,6 +509,7 @@ export const Definitions = Event.inventory(
   Held.Entered,
   Validation.Recorded,
   Validation.RecordedV2,
+  Validation.RecordedV3,
   Review.Received,
   Authorization.Granted,
   Dispatch.Reserved,

@@ -33,6 +33,7 @@ import { renderPresentation } from "../../src/maestro/approval"
 import { taskHash } from "../../src/maestro/task-hash"
 import { and, eq } from "drizzle-orm"
 import { createHash } from "node:crypto"
+import { Git } from "@/git"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -48,6 +49,7 @@ const layer = LayerNode.compile(
     Agent.node,
     BackgroundJob.node,
     EventV2Bridge.node,
+    Git.node,
     Config.node,
     CrossSpawnSpawner.node,
     Session.node,
@@ -64,13 +66,13 @@ const layer = LayerNode.compile(
 
 const it = testEffect(layer)
 
-function stubOps(options?: { onPrompt?: () => void }): TaskPromptOps {
+function stubOps(options?: { onPrompt?: (input: SessionPrompt.PromptInput) => void }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt: (input) =>
       Effect.sync(() => {
-        options?.onPrompt?.()
+        options?.onPrompt?.(input)
         return {
           info: {
             id: MessageID.ascending(),
@@ -326,30 +328,32 @@ describe("Maestro governed lifecycle", () => {
     15_000,
   )
 
-  it.instance("shows governance tools only to Maestro", () =>
-    Effect.gen(function* () {
-      const agent = yield* Agent.Service
-      const registry = yield* ToolRegistry.Service
-      const build = yield* agent.get("build")
-      const maestro = yield* agent.get("maestro")
-      const lucy = yield* agent.get("lucy")
-      if (!build || !maestro || !lucy) throw new Error("expected native agents")
-      const buildTools = yield* registry.tools({ ...ref, agent: build })
-      const maestroTools = yield* registry.tools({ ...ref, agent: maestro })
-      const lucyTools = yield* registry.tools({ ...ref, agent: lucy })
-      expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_present_approval")
-      expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_approval")
-      expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_admission")
-      expect(maestroTools.map((tool) => tool.id)).toContain("maestro_present_approval")
-      expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_approval")
-      expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_admission")
-      expect(lucyTools.map((tool) => tool.id)).toContain("maestro_record_review")
-      expect(lucyTools.map((tool) => tool.id)).not.toContain("maestro_request_review")
-      expect(lucyTools.map((tool) => tool.id)).not.toContain("task")
-      expect(lucyTools.map((tool) => tool.id)).not.toContain("edit")
-      expect(lucyTools.map((tool) => tool.id)).not.toContain("write")
-      expect(lucyTools.map((tool) => tool.id)).not.toContain("shell")
-    }),
+  it.instance(
+    "shows governance tools only to Maestro",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        const registry = yield* ToolRegistry.Service
+        const build = yield* agent.get("build")
+        const maestro = yield* agent.get("maestro")
+        const lucy = yield* agent.get("lucy")
+        if (!build || !maestro || !lucy) throw new Error("expected native agents")
+        const buildTools = yield* registry.tools({ ...ref, agent: build })
+        const maestroTools = yield* registry.tools({ ...ref, agent: maestro })
+        const lucyTools = yield* registry.tools({ ...ref, agent: lucy })
+        expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_present_approval")
+        expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_approval")
+        expect(buildTools.map((tool) => tool.id)).not.toContain("maestro_record_admission")
+        expect(maestroTools.map((tool) => tool.id)).toContain("maestro_present_approval")
+        expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_approval")
+        expect(maestroTools.map((tool) => tool.id)).toContain("maestro_record_admission")
+        expect(lucyTools.map((tool) => tool.id)).toContain("maestro_record_review")
+        expect(lucyTools.map((tool) => tool.id)).not.toContain("maestro_request_review")
+        expect(lucyTools.map((tool) => tool.id)).not.toContain("task")
+        expect(lucyTools.map((tool) => tool.id)).not.toContain("edit")
+        expect(lucyTools.map((tool) => tool.id)).not.toContain("write")
+        expect(lucyTools.map((tool) => tool.id)).not.toContain("shell")
+      }),
     15_000,
   )
 
@@ -429,7 +433,8 @@ describe("Maestro governed lifecycle", () => {
           ),
         )
         expect(Exit.isFailure(spoofed)).toBe(true)
-        if (Exit.isFailure(spoofed)) expect(Cause.pretty(spoofed.cause)).toContain("Approval presentation requires Maestro")
+        if (Exit.isFailure(spoofed))
+          expect(Cause.pretty(spoofed.cause)).toContain("Approval presentation requires Maestro")
       }),
     { config: { agent: { maestro: { name: "Conductor" } } } },
   )

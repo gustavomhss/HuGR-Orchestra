@@ -1429,6 +1429,7 @@ export type GlobalEvent = {
           planRevisionID: string
           contextRecordID: string
           contextHash: string
+          reviewBaseSHA: string
           projectID: string
           workCardID: string
           workCard: string
@@ -4484,7 +4485,7 @@ export type SyncEventMaestroValidationRecorded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "maestro.validation.recorded.2"
+    type: "maestro.validation.recorded.3"
     id: string
     seq: number
     aggregateID: string
@@ -4493,6 +4494,7 @@ export type SyncEventMaestroValidationRecorded = {
       planRevisionID: string
       contextRecordID: string
       contextHash: string
+      reviewBaseSHA: string
       projectID: string
       workCardID: string
       workCard: string
@@ -6426,6 +6428,7 @@ export type MaestroValidationRecorded = {
     planRevisionID: string
     contextRecordID: string
     contextHash: string
+    reviewBaseSHA: string
     projectID: string
     workCardID: string
     workCard: string
@@ -8143,6 +8146,7 @@ export type EventMaestroValidationRecorded = {
     planRevisionID: string
     contextRecordID: string
     contextHash: string
+    reviewBaseSHA: string
     projectID: string
     workCardID: string
     workCard: string
@@ -11066,7 +11070,6 @@ export type SessionListResponse = SessionListResponses[keyof SessionListResponse
 
 export type SessionCreateData = {
   body?: {
-    id?: string
     parentID?: string
     title?: string
     agent?: string

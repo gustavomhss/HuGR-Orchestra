@@ -1,0 +1,323 @@
+import { afterEach, describe, expect } from "bun:test"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
+import { Cause, Effect, Exit } from "effect"
+import { Agent } from "../../src/agent/agent"
+import { Config } from "../../src/config/config"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { Git } from "../../src/git"
+import { workCardHash } from "../../src/maestro/validation-record"
+import { recordContext } from "../../src/maestro/context-record"
+import type { SessionPrompt } from "../../src/session/prompt"
+import { MessageID, PartID } from "../../src/session/schema"
+import { Session } from "../../src/session/session"
+import { MaestroPresentApprovalTool } from "../../src/tool/maestro-approval"
+import { MaestroRequestReviewTool } from "../../src/tool/maestro-review"
+import type { TaskPromptOps } from "../../src/tool/task"
+import { Truncate } from "../../src/tool/truncate"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+
+afterEach(async () => disposeAllInstances())
+
+const model = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("test-model") }
+const it = testEffect(
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      Config.node,
+      CrossSpawnSpawner.node,
+      Database.node,
+      EventV2Bridge.node,
+      Git.node,
+      Session.node,
+      SessionProjector.node,
+      Truncate.node,
+    ]),
+  ),
+)
+
+const seed = Effect.fn("MaestroEvidenceToolsTest.seed")(function* () {
+  const sessions = yield* Session.Service
+  const chat = yield* sessions.create({ title: "evidence tools" })
+  const user = yield* sessions.updateMessage({
+    id: MessageID.ascending(),
+    role: "user",
+    sessionID: chat.id,
+    agent: "maestro",
+    model,
+    time: { created: Date.now() },
+  })
+  const assistant: SessionV1.Assistant = {
+    id: MessageID.ascending(),
+    role: "assistant",
+    parentID: user.id,
+    sessionID: chat.id,
+    mode: "maestro",
+    agent: "maestro",
+    cost: 0,
+    path: { cwd: chat.directory, root: chat.directory },
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: model.modelID,
+    providerID: model.providerID,
+    time: { created: Date.now() },
+  }
+  yield* sessions.updateMessage(assistant)
+  return { chat, assistant }
+})
+
+function promptOps(onPrompt: (input: SessionPrompt.PromptInput) => void): TaskPromptOps {
+  return {
+    cancel: () => Effect.void,
+    resolvePromptParts: (template) => Effect.succeed([{ type: "text", text: template }]),
+    prompt: (input) =>
+      Effect.sync(() => {
+        onPrompt(input)
+        const id = MessageID.ascending()
+        return {
+          info: {
+            id,
+            role: "assistant",
+            parentID: input.messageID ?? MessageID.ascending(),
+            sessionID: input.sessionID,
+            mode: input.agent ?? "lucy",
+            agent: input.agent ?? "lucy",
+            cost: 0,
+            path: { cwd: "/tmp", root: "/tmp" },
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            modelID: input.model?.modelID ?? model.modelID,
+            providerID: input.model?.providerID ?? model.providerID,
+            time: { created: Date.now() },
+            finish: "stop",
+          },
+          parts: [{ id: PartID.ascending(), messageID: id, sessionID: input.sessionID, type: "text", text: "done" }],
+        }
+      }),
+  }
+}
+
+describe("Maestro evidence tools", () => {
+  it.instance(
+    "sends Lucy full bound multi-commit diff",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const events = yield* EventV2Bridge.Service
+        const git = yield* Git.Service
+        const test = yield* TestInstance
+        const workCard = "# Card\nReview full branch diff.\n"
+        const base = (yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })).text().trim()
+        yield* Effect.promise(() => Bun.write(`${test.directory}/first.txt`, "first\n"))
+        yield* git.run(["add", "first.txt"], { cwd: test.directory })
+        yield* git.run(["commit", "-m", "first"], { cwd: test.directory })
+        yield* Effect.promise(() => Bun.write(`${test.directory}/second.txt`, "second\n"))
+        yield* git.run(["add", "second.txt"], { cwd: test.directory })
+        yield* git.run(["commit", "-m", "second"], { cwd: test.directory })
+        const planRevisionID = EventV2.ID.make("evt_plan_review_tool")
+        yield* events.publish(
+          MaestroEvent.PlanRevision.Recorded,
+          {
+            id: planRevisionID,
+            sessionID: chat.id,
+            admissionMessageID: "msg_admission",
+            methodVersion: "draft-plan-v1",
+            revision: "v1",
+            goal: { value: "review full branch diff", source: "maestro" },
+            acceptance: [{ value: "tests pass", source: "maestro" }],
+            scope: [{ value: "card", source: "maestro" }],
+            constraints: [],
+            reviewRequirement: { value: "Lucy", source: "maestro" },
+            contextRequirement: "PENDING",
+            assumptions: [],
+            risks: [],
+            status: "PROPOSED",
+            revisionHash: "f".repeat(64),
+            createdAt: 1,
+          },
+          { id: planRevisionID },
+        )
+        const context = yield* recordContext(planRevisionID, chat.id)
+        const validationRecordID = EventV2.ID.make("evt_maestro_validation_review_tool")
+        yield* events.publish(
+          MaestroEvent.Validation.RecordedV3,
+          {
+            sessionID: chat.id,
+            planRevisionID,
+            contextRecordID: context.id,
+            contextHash: context.contextHash,
+            reviewBaseSHA: base,
+            projectID: chat.projectID,
+            workCardID: "card_review_tool",
+            workCard,
+            workCardHash: workCardHash(workCard),
+            routedMemberID: "charlie",
+            rosterHash: "b".repeat(64),
+            grantHash: "c".repeat(64),
+            reviewPolicyHash: "d".repeat(64),
+            actor: { version: "rfc8785-v1", bytes: "actor", sha256: "e".repeat(64) },
+            validatorID: "maestro",
+            validatorVersion: "validation-v1",
+            checks: [{ id: "typecheck", status: "PASS", detail: "clean" }],
+            outcome: "VALID",
+          },
+          { id: validationRecordID },
+        )
+        let prompt = ""
+        const tool = yield* MaestroRequestReviewTool
+        const result = yield* tool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute(
+              { validationRecordID, workCard, reviewMethodVersion: "review-v1" },
+              {
+                sessionID: chat.id,
+                messageID: assistant.id,
+                agent: "maestro",
+                agentID: "maestro",
+                abort: new AbortController().signal,
+                extra: {
+                  promptOps: promptOps(
+                    (input) =>
+                      (prompt = input.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("")),
+                  ),
+                },
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            ),
+          ),
+        )
+
+        expect(result.output).toContain("LUCY_NO_RECEIPT")
+        expect(prompt).toContain(`\"baseSHA\":\"${base}\"`)
+        expect(prompt).toContain("first.txt")
+        expect(prompt).toContain("second.txt")
+      }),
+    { git: true },
+    15_000,
+  )
+
+  it.instance(
+    "rejects approval presentation when durable context is stale",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const events = yield* EventV2Bridge.Service
+        const planRevisionID = EventV2.ID.make("evt_plan_stale_presentation")
+        const contextRecordID = EventV2.ID.make("evt_context_stale_presentation")
+        const validationRecordID = EventV2.ID.make("evt_validation_stale_presentation")
+        yield* events.publish(
+          MaestroEvent.PlanRevision.Recorded,
+          {
+            id: planRevisionID,
+            sessionID: chat.id,
+            admissionMessageID: "msg_admission",
+            methodVersion: "draft-plan-v1",
+            revision: "v1",
+            goal: { value: "implement card", source: "maestro" },
+            acceptance: [{ value: "tests pass", source: "maestro" }],
+            scope: [{ value: "card", source: "maestro" }],
+            constraints: [],
+            reviewRequirement: { value: "Lucy", source: "maestro" },
+            contextRequirement: "PENDING",
+            assumptions: [],
+            risks: [],
+            status: "PROPOSED",
+            revisionHash: "a".repeat(64),
+            createdAt: 1,
+          },
+          { id: planRevisionID },
+        )
+        yield* events.publish(
+          MaestroEvent.Context.Recorded,
+          {
+            id: contextRecordID,
+            sessionID: chat.id,
+            planRevisionID,
+            projectID: chat.projectID,
+            directory: chat.directory,
+            mode: "UNGROUNDED",
+            branch: "test",
+            headSHA: "b".repeat(40),
+            changedPaths: [],
+            currentEvidenceIdentityHash: "c".repeat(64),
+            contextHash: "d".repeat(64),
+            status: "CURRENT",
+            createdAt: 1,
+          },
+          { id: contextRecordID },
+        )
+        yield* events.publish(
+          MaestroEvent.Validation.RecordedV3,
+          {
+            sessionID: chat.id,
+            planRevisionID,
+            contextRecordID,
+            contextHash: "d".repeat(64),
+            reviewBaseSHA: "e".repeat(40),
+            projectID: chat.projectID,
+            workCardID: "card_stale_presentation",
+            workCard: "# Card\n",
+            workCardHash: workCardHash("# Card\n"),
+            routedMemberID: "charlie",
+            rosterHash: "f".repeat(64),
+            grantHash: "1".repeat(64),
+            reviewPolicyHash: "2".repeat(64),
+            actor: { version: "rfc8785-v1", bytes: "actor", sha256: "3".repeat(64) },
+            validatorID: "maestro",
+            validatorVersion: "validation-v1",
+            checks: [{ id: "typecheck", status: "PASS", detail: "clean" }],
+            outcome: "VALID",
+          },
+          { id: validationRecordID },
+        )
+        const tool = yield* MaestroPresentApprovalTool
+        const exit = yield* tool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute(
+              {
+                planRevisionID,
+                validationRecordID,
+                contextRecordID,
+                revisionHash: "ignored",
+                validationHash: "ignored",
+                contextHash: "ignored",
+                policyHash: "ignored",
+                intent: { subagentType: "charlie", prompt: "implement card" },
+                methodVersion: "request-approval-v1",
+                plan: "ignored",
+                provenance: "ignored",
+                assumptions: [],
+                validationLedger: "ignored",
+                contextState: "CURRENT",
+              },
+              {
+                sessionID: chat.id,
+                messageID: assistant.id,
+                callID: "call_stale_presentation",
+                agent: "maestro",
+                agentID: "maestro",
+                abort: new AbortController().signal,
+                messages: [],
+                metadata: () => Effect.void,
+                ask: () => Effect.void,
+              },
+            ),
+          ),
+          Effect.exit,
+        )
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("Approval presentation context is stale")
+      }),
+    { git: true },
+    15_000,
+  )
+})

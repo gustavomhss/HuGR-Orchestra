@@ -24,6 +24,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Git } from "@/git"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -40,6 +41,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       Agent.node,
       BackgroundJob.node,
       EventV2Bridge.node,
+      Git.node,
       Config.node,
       CrossSpawnSpawner.node,
       Session.node,

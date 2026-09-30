@@ -32,6 +32,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { Git } from "@/git"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -46,6 +47,7 @@ const it = testEffect(
       CrossSpawnSpawner.node,
       Database.node,
       EventV2Bridge.node,
+      Git.node,
       MCP.node,
       Permission.node,
       Plugin.node,

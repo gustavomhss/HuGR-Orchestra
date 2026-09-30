@@ -8,13 +8,16 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "../../src/background/job"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { authorizationTaskIntentHash } from "../../src/maestro/authorization"
+import { recordContext } from "../../src/maestro/context-record"
+import { recordValidation } from "../../src/maestro/validation-record"
+import { Git } from "../../src/git"
 import { Session } from "../../src/session/session"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
@@ -36,6 +39,7 @@ const it = testEffect(
       CrossSpawnSpawner.node,
       Database.node,
       EventV2Bridge.node,
+      Git.node,
       Ripgrep.node,
       RuntimeFlags.node,
       Session.node,
@@ -120,60 +124,171 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-it.instance("dispatches exact routed child from AuthorizationGranted", () =>
-  Effect.gen(function* () {
-    const events = yield* EventV2Bridge.Service
-    const { chat, assistant } = yield* seed()
-    const authorizationID = EventV2.ID.make("evt_maestro_authorization_task_test")
-    yield* events.publish(
-      MaestroEvent.Authorization.Granted,
-      {
+it.instance(
+  "dispatches exact routed child from AuthorizationGranted",
+  () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2Bridge.Service
+      const { chat, assistant } = yield* seed()
+      const planRevisionID = EventV2.ID.make("evt_maestro_plan_task_test")
+      yield* events.publish(
+        MaestroEvent.PlanRevision.Recorded,
+        {
+          id: planRevisionID,
+          sessionID: chat.id,
+          admissionMessageID: "msg_admission",
+          methodVersion: "draft-plan-v1",
+          revision: "v1",
+          goal: { value: "implement card", source: "maestro" },
+          acceptance: [{ value: "tests pass", source: "maestro" }],
+          scope: [{ value: "card", source: "maestro" }],
+          constraints: [],
+          reviewRequirement: { value: "Lucy", source: "maestro" },
+          contextRequirement: "PENDING",
+          assumptions: [],
+          risks: [],
+          status: "PROPOSED",
+          revisionHash: "a".repeat(64),
+          createdAt: 1,
+        },
+        { id: planRevisionID },
+      )
+      const contextRecord = yield* recordContext(planRevisionID, chat.id)
+      const validation = yield* recordValidation({
         sessionID: chat.id,
+        planRevisionID,
+        contextRecordID: contextRecord.id,
+        contextHash: contextRecord.contextHash,
         projectID: chat.projectID,
-        approvalMessageID: "msg_approval",
-        validationRecordID: "evt_validation",
-        workCardHash: "a".repeat(64),
+        workCardID: "card_task_test",
+        workCard: "# Card\n",
         routedMemberID: "charlie",
-        rosterHash: "b".repeat(64),
-        grantHash: "c".repeat(64),
-        reviewPolicyHash: "d".repeat(64),
-        actor: { version: "rfc8785-v1", bytes: "actor", sha256: "e".repeat(64) },
-        reviewerID: "lucy",
-        taskIntentHash: authorizationTaskIntentHash({ subagentType: "charlie", prompt: "implement card" }),
-        methodVersion: "authorization-v1",
-      },
-      { id: authorizationID },
-    )
-    const task = yield* TaskTool
-    const def = yield* task.init()
-    const context = {
-      sessionID: chat.id,
-      messageID: assistant.id,
-      agent: "maestro",
-      agentID: "maestro",
-      abort: new AbortController().signal,
-      extra: { promptOps: stubOps() },
-      messages: [],
-      metadata: () => Effect.void,
-      ask: () => Effect.void,
-    }
-    const result = yield* def.execute(
-      { description: "implement card", prompt: "implement card", subagent_type: "charlie", authorizationID },
-      context,
-    )
-    const sessions = yield* Session.Service
-    const child = (yield* sessions.children(chat.id))[0]
-    expect(child?.agent).toBe("charlie")
-    expect(result.metadata.sessionId).toBe(child?.id)
-    const changed = yield* Effect.exit(
-      def.execute(
-        { description: "different", prompt: "different work", subagent_type: "charlie", authorizationID },
-        context,
-      ),
-    )
-    expect(Exit.isFailure(changed)).toBe(true)
-    if (Exit.isFailure(changed)) expect(Cause.pretty(changed.cause)).toContain("task-intent-mismatch")
-  }),
+        validatorID: "maestro",
+        validatorVersion: "validation-v1",
+        checks: [{ id: "typecheck", status: "PASS", detail: "clean" }],
+      })
+      const authorizationID = EventV2.ID.make("evt_maestro_authorization_task_test")
+      yield* events.publish(
+        MaestroEvent.Authorization.Granted,
+        {
+          sessionID: chat.id,
+          projectID: chat.projectID,
+          approvalMessageID: "msg_approval",
+          validationRecordID: validation.id,
+          workCardHash: validation.workCardHash,
+          routedMemberID: validation.routedMemberID,
+          rosterHash: validation.rosterHash,
+          grantHash: validation.grantHash,
+          reviewPolicyHash: validation.reviewPolicyHash,
+          actor: validation.actor,
+          reviewerID: "lucy",
+          taskIntentHash: authorizationTaskIntentHash({ subagentType: "charlie", prompt: "implement card" }),
+          methodVersion: "authorization-v1",
+        },
+        { id: authorizationID },
+      )
+      const config = yield* Config.Service
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let entries = 0
+      const task = yield* TaskTool.pipe(
+        Effect.provideService(Config.Service, {
+          ...config,
+          get: () =>
+            Effect.gen(function* () {
+              entries++
+              yield* Deferred.succeed(entered, undefined)
+              yield* Deferred.await(release)
+              return yield* config.get()
+            }),
+        }),
+      )
+      const def = yield* task.init()
+      let prompts = 0
+      const context = {
+        sessionID: chat.id,
+        messageID: assistant.id,
+        agent: "maestro",
+        agentID: "maestro",
+        abort: new AbortController().signal,
+        extra: { promptOps: stubOps(() => prompts++) },
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      }
+      const params = {
+        description: "implement card",
+        prompt: "implement card",
+        subagent_type: "charlie",
+        authorizationID,
+      }
+      const first = yield* def.execute(params, context).pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(entered)
+      // Both callers start immediately; pause the first inside execution before any Git or DB work.
+      const second = yield* def.execute(params, context).pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+      expect(entries).toBe(1)
+      yield* Deferred.succeed(release, undefined)
+      const attempts = yield* Effect.all([Fiber.join(first), Fiber.join(second)])
+      const successes = attempts.filter(Exit.isSuccess)
+      const failures = attempts.filter(Exit.isFailure)
+      expect(successes).toHaveLength(1)
+      expect(failures).toHaveLength(1)
+      expect(Cause.pretty(failures[0].cause)).toContain("reserved-child-incomplete")
+      const result = successes[0].value
+      const sessions = yield* Session.Service
+      const child = (yield* sessions.children(chat.id))[0]
+      expect(child?.agent).toBe("charlie")
+      expect(result.metadata.sessionId).toBe(child?.id)
+      expect(prompts).toBe(1)
+      const incomplete = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(incomplete)).toBe(true)
+      if (Exit.isFailure(incomplete)) expect(Cause.pretty(incomplete.cause)).toContain("reserved-child-incomplete")
+      if (!child) throw new Error("missing child")
+      const childUser = yield* sessions.updateMessage({
+        id: MessageID.ascending(),
+        role: "user",
+        sessionID: child.id,
+        agent: "charlie",
+        model,
+        time: { created: Date.now() },
+      })
+      const completed: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: childUser.id,
+        sessionID: child.id,
+        mode: "charlie",
+        agent: "charlie",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: model.modelID,
+        providerID: model.providerID,
+        time: { created: Date.now() },
+        finish: "stop",
+      }
+      yield* sessions.updateMessage(completed)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: completed.id,
+        sessionID: child.id,
+        type: "text",
+        text: "done",
+      })
+      const replay = yield* def.execute(params, context)
+      expect(replay.metadata.sessionId).toBe(child.id)
+      expect(replay.output).toContain("done")
+      expect(prompts).toBe(1)
+      const changed = yield* Effect.exit(
+        def.execute(
+          { description: "different", prompt: "different work", subagent_type: "charlie", authorizationID },
+          context,
+        ),
+      )
+      expect(Exit.isFailure(changed)).toBe(true)
+      if (Exit.isFailure(changed)) expect(Cause.pretty(changed.cause)).toContain("task-intent-mismatch")
+    }),
+  { git: true },
 )
 
 it.instance("resumes exact native task session from task_id", () =>

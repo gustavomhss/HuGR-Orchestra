@@ -20,7 +20,8 @@ import { readContext } from "./context-record"
 
 type Check = { id: string; status: "PASS" | "FAIL" | "HOLD"; detail: string }
 type LegacyValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.Recorded.data>
-type ValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.RecordedV2.data>
+type ValidationV2Data = Schema.Schema.Type<typeof MaestroEvent.Validation.RecordedV2.data>
+type ValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.RecordedV3.data>
 type ReviewData = Schema.Schema.Type<typeof MaestroEvent.Review.Received.data>
 
 export type RecordValidationInput = {
@@ -37,7 +38,7 @@ export type RecordValidationInput = {
   checks: unknown
 }
 
-export type ValidationRecord = (LegacyValidationData | ValidationData) & { id: string }
+export type ValidationRecord = (LegacyValidationData | ValidationV2Data | ValidationData) & { id: string }
 
 export type RecordReviewInput = {
   sessionID: string
@@ -117,7 +118,7 @@ function requireText(value: unknown, reason: string): string {
   throw new ValidationRejectedError({ reason })
 }
 
-function validation(input: RecordValidationInput): Omit<ValidationData, "actor"> {
+function validation(input: RecordValidationInput): Omit<ValidationData, "actor" | "reviewBaseSHA"> {
   const sessionID = requireText(input.sessionID, "malformed-session-id")
   const projectID = requireText(input.projectID, "malformed-project-id")
   const workCardID = requireText(input.workCardID, "malformed-work-card-id")
@@ -207,13 +208,13 @@ const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!project) return yield* new ValidationRejectedError({ reason: "session-project-absent" })
-  const matches = yield* Effect.forEach([project.worktree, ...project.sandboxes], (root) =>
-    containsPath(root, session.directory),
-  )
-  if (!matches.some(Boolean)) {
+  const roots = [project.worktree, ...project.sandboxes]
+  const matches = yield* Effect.forEach(roots, (root) => containsPath(root, session.directory))
+  const root = roots[matches.findIndex(Boolean)]
+  if (!root) {
     return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   }
-  return { session, project }
+  return { session, project, root }
 })
 
 function requireChecks(value: unknown): Check[] {
@@ -252,6 +253,9 @@ export const readValidation = Effect.fn("MaestroValidation.read")(function* (id:
     .get()
     .pipe(Effect.orDie)
   if (!row) return undefined
+  if (row.type === EventV2.versionedType(MaestroEvent.Validation.RecordedV3.type, 3)) {
+    return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV3.data)(row.data) }
+  }
   if (row.type === EventV2.versionedType(MaestroEvent.Validation.RecordedV2.type, 2)) {
     return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV2.data)(row.data) }
   }
@@ -263,9 +267,14 @@ export const readValidation = Effect.fn("MaestroValidation.read")(function* (id:
 
 export const recordValidation = Effect.fn("MaestroValidation.record")(function* (input: RecordValidationInput) {
   const trusted = yield* resolveSession(input.sessionID, input.projectID)
+  const git = yield* Git.Service
+  const base = yield* git.defaultBranch(trusted.session.directory)
+  const reviewBaseSHA = base ? yield* git.mergeBase(trusted.session.directory, base.ref) : undefined
+  if (!reviewBaseSHA) return yield* new ValidationRejectedError({ reason: "review-base-unavailable" })
   const wanted = yield* Effect.try({
     try: () => ({
       ...validation(input),
+      reviewBaseSHA,
       projectID: trusted.session.projectID,
       actor: actor(trusted.session, "maestro"),
     }),
@@ -282,7 +291,7 @@ export const recordValidation = Effect.fn("MaestroValidation.record")(function* 
     return yield* new ValidationConflictError({ sessionID: input.sessionID, workCardID: input.workCardID })
   }
   const events = yield* EventV2Bridge.Service
-  return yield* events.publish(MaestroEvent.Validation.RecordedV2, wanted, { id }).pipe(
+  return yield* events.publish(MaestroEvent.Validation.RecordedV3, wanted, { id }).pipe(
     Effect.map((recorded) => ({ id: recorded.id, ...recorded.data })),
     Effect.catchCause((cause) =>
       Effect.gen(function* () {
@@ -337,15 +346,17 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
   if (typeof input.workCard !== "string" || workCardHash(input.workCard) !== record.workCardHash) {
     return yield* new ReviewRejectedError({ reason: "work-card-mismatch" })
   }
-  const artifact = yield* requireArtifact(
-    input.artifact,
-    record.workCardHash,
-    trusted.session.directory,
-    trusted.project.worktree,
-  )
+  const artifact = yield* requireArtifact(input.artifact, record.workCardHash, trusted.session.directory, trusted.root)
   if (record.contextRecordID) {
     const context = yield* readContext(record.contextRecordID)
-    if (!context || context.contextHash !== record.contextHash || artifact.headSHA !== context.headSHA) {
+    if (
+      !context ||
+      context.contextHash !== record.contextHash ||
+      context.changedPaths.length > 0 ||
+      artifact.headSHA !== context.headSHA ||
+      !("reviewBaseSHA" in record) ||
+      artifact.baseSHA !== record.reviewBaseSHA
+    ) {
       return yield* new ReviewRejectedError({ reason: "artifact-context-mismatch" })
     }
   }

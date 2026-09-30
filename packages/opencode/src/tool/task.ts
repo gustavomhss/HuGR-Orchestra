@@ -21,6 +21,8 @@ import { authorizationTaskIntentHash } from "@/maestro/authorization"
 import { nativeProfiles, roster } from "@/maestro/roster"
 import { Permission } from "@/permission"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Git } from "@/git"
+import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -29,6 +31,7 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+const dispatchLock = KeyedMutex.makeUnsafe<string>()
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
   "Foreground is the default; use it when you need the result before continuing.",
@@ -120,6 +123,7 @@ export const TaskTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const events = yield* EventV2Bridge.Service
+    const git = yield* Git.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -143,6 +147,7 @@ export const TaskTool = Tool.define(
       let governedPresentationID: string | undefined
       let governedCallID: string | undefined
       let replayReserved = false
+      let requireCompletedReplay = false
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
@@ -191,6 +196,8 @@ export const TaskTool = Tool.define(
         }
         governedChildID = SessionID.make(reservation.childSessionID)
         reservedChildPermissions = reservation.permission
+        replayReserved = true
+        requireCompletedReplay = true
       }
       const resumed = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
@@ -425,6 +432,9 @@ export const TaskTool = Tool.define(
         const completed = history.findLast(
           (message) => message.info.role === "assistant" && message.info.finish !== undefined && !message.info.error,
         )
+        if (!completed && requireCompletedReplay) {
+          return yield* Effect.fail(new Error("Governed Task denied: reserved-child-incomplete"))
+        }
         const output = completed?.parts.findLast((part) => part.type === "text")?.text ?? ""
         return {
           title: params.description,
@@ -604,9 +614,13 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(
+        (params.authorizationID
+          ? dispatchLock.withLock(params.authorizationID)(run(params, ctx))
+          : run(params, ctx)
+        ).pipe(
           Effect.provideService(Database.Service, database),
           Effect.provideService(EventV2Bridge.Service, events),
+          Effect.provideService(Git.Service, git),
           Effect.orDie,
         ),
     }
