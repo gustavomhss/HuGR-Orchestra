@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -254,6 +254,13 @@ export function SessionSidePanel(props: {
     openReviewPanel()
     tabs().setActive(next)
   }
+  // Mount the collection only after its saved state and Review trigger are ready.
+  // Otherwise Kobalte persists Apps as a fallback over the restored Review tab.
+  const PanelTabs = (input: ComponentProps<typeof Tabs>) => (
+    <Show when={layout.ready() && props.canReview()}>
+      <Tabs {...input} />
+    </Show>
+  )
   const browserTab = createMemo(() => {
     if (!props.fileBrowserState) return undefined
     const active = activeTab()
@@ -373,7 +380,7 @@ export function SessionSidePanel(props: {
                       >
                         <DragDropSensors />
                         <ConstrainDragYAxis />
-                        <Tabs value={activeTab()} onChange={activateTab}>
+                        <PanelTabs value={activeTab()} onChange={activateTab}>
                           <div class="sticky top-0 shrink-0 flex">
                             <Tabs.List
                               ref={(el: HTMLDivElement) => {
@@ -575,7 +582,7 @@ export function SessionSidePanel(props: {
                           <Show when={activeFileTab()} keyed>
                             {(tab) => <FileTabContent tab={tab} />}
                           </Show>
-                        </Tabs>
+                        </PanelTabs>
                         <DragOverlay>
                           <Show when={store.activeDraggable} keyed>
                             {(tab) => {
@@ -618,7 +625,7 @@ export function SessionSidePanel(props: {
                         tabs().move(source.id.toString(), source.index)
                       }}
                     >
-                      <Tabs value={activeTab()} onChange={activateTab}>
+                      <PanelTabs value={activeTab()} onChange={activateTab}>
                         <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
                           <Tabs.List
                             ref={(el: HTMLDivElement) => {
@@ -871,7 +878,7 @@ export function SessionSidePanel(props: {
                             />
                           </div>
                         </Show>
-                      </Tabs>
+                      </PanelTabs>
                     </DndKitProvider>
                   </Show>
                 </div>
