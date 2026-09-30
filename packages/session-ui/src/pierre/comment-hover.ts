@@ -6,6 +6,7 @@ export type HoverCommentLine = {
 export function createHoverCommentUtility(props: {
   label: string
   getHoveredLine: () => HoverCommentLine | undefined
+  onFocus?: (line: HoverCommentLine) => void
   onSelect: (line: HoverCommentLine) => void
 }) {
   if (typeof document === "undefined") return
@@ -63,7 +64,10 @@ export function createHoverCommentUtility(props: {
   document.addEventListener("scroll", onHoverInvalidated, { passive: true, capture: true })
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
-  button.addEventListener("focus", sync)
+  button.addEventListener("focus", () => {
+    sync()
+    if (line) props.onFocus?.(line)
+  })
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault()
     event.stopPropagation()

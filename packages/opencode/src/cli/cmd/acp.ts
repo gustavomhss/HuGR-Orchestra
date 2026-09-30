@@ -61,18 +61,29 @@ export const AcpCommand = cmd({
         // EOF must also stop startup before heavy imports and server setup complete.
         yield* Effect.raceFirst(
           Effect.gen(function* () {
-            const { Server } = yield* Effect.promise(() => import("@/server/server"))
-            const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
-            const { AppRuntime } = yield* Effect.promise(() => import("@/effect/app-runtime"))
-            const opts = yield* Effect.promise(() => AppRuntime.runPromise(resolveNetworkOptions(args)))
+            const modules = yield* Effect.all(
+              {
+                server: Effect.promise(() =>
+                  ACPProfile.measure("cli.acp.server.import", () => import("@/server/server")),
+                ),
+                agent: Effect.promise(() => ACPProfile.measure("cli.acp.agent.import", () => import("@/acp/agent"))),
+                runtime: Effect.promise(() =>
+                  ACPProfile.measure("cli.acp.runtime.import", () => import("@/effect/app-runtime")),
+                ),
+              },
+              { concurrency: "unbounded" },
+            )
+            const opts = yield* Effect.promise((signal) =>
+              modules.runtime.AppRuntime.runPromise(resolveNetworkOptions(args), { signal }),
+            )
             const server = yield* Effect.promise(() =>
-              ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)),
+              ACPProfile.measure("cli.acp.server.listen", () => modules.server.Server.listen(opts)),
             )
             const sdk = createOpencodeClient({
               baseUrl: `http://${server.hostname}:${server.port}`,
               headers: ServerAuth.headers(),
             })
-            const agent = ACP.init({ sdk })
+            const agent = modules.agent.ACP.init({ sdk })
             new AgentSideConnection(
               (conn) => {
                 ACPProfile.mark("cli.acp.connection.create")
@@ -80,7 +91,9 @@ export const AcpCommand = cmd({
               },
               ndJsonStream(input, output),
             )
-            yield* Effect.promise(() => AppRuntime.runPromise(Effect.logInfo("setup connection")))
+            yield* Effect.promise((signal) =>
+              modules.runtime.AppRuntime.runPromise(Effect.logInfo("setup connection"), { signal }),
+            )
             yield* Deferred.await(ended)
           }),
           Deferred.await(ended),
