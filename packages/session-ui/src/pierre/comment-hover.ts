@@ -31,7 +31,7 @@ export function createHoverCommentUtility(props: {
   button.style.left = "30px"
   button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"
 
-  let line: HoverCommentLine | undefined
+  let line = props.getHoveredLine()
 
   const sync = () => {
     const next = props.getHoveredLine()
@@ -63,6 +63,7 @@ export function createHoverCommentUtility(props: {
   document.addEventListener("scroll", onHoverInvalidated, { passive: true, capture: true })
   button.addEventListener("mouseenter", sync)
   button.addEventListener("mousemove", sync)
+  button.addEventListener("focus", sync)
   button.addEventListener("pointerdown", (event) => {
     event.preventDefault()
     event.stopPropagation()
