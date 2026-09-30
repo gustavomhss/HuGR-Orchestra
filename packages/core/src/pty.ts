@@ -180,8 +180,7 @@ const layer = Layer.effect(
       }
       yield* Effect.logInfo("creating session", { id, cmd: command, args, cwd })
       const { spawn } = yield* Effect.promise(() => pty())
-      // Spawn and subscribe in one synchronous turn. An Effect yield between them
-      // can let bun-pty's deferred read loop emit exit before listeners exist.
+      // Spawn and subscribe before yielding so bun-pty cannot emit exit without listeners.
       const proc = spawn(command, args, { name: "xterm-256color", cwd, env })
       const info: Info = {
         id,

@@ -54,7 +54,7 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
-  .middleware((opts) => {
+  .middleware(async (opts) => {
     if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     if (opts.pure) {
