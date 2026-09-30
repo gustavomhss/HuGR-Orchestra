@@ -32,6 +32,7 @@ export type ProjectMeta = {
 
 export type State = {
   status: "loading" | "partial" | "complete"
+  bootstrapSettled?: boolean
   agent: Agent[]
   command: CommandInfo[]
   reference: ReferenceInfo[]

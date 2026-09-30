@@ -44,10 +44,13 @@ test("restores review mode and selected file per session", async ({ page }) => {
   await expectSelectedFile(page, "gamma.ts")
 })
 
-test("keeps Apps usable when the project lookup is empty", async ({ page }) => {
+test("keeps Apps usable with an empty project lookup and failed bootstrap request", async ({ page }) => {
   await setup(page)
   await page.route(/\/(?:api\/)?project(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  )
+  await page.route(/\/(?:api\/permission\/request|permission)(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 500, body: "bootstrap permission failure" }),
   )
   await page.addInitScript(() => {
     localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ review: { panelOpened: true } }))

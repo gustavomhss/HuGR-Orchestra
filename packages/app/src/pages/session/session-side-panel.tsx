@@ -260,7 +260,7 @@ export function SessionSidePanel(props: {
   }
   // Wait for bootstrap so Kobalte cannot replace the restored Review tab with Apps.
   const PanelTabs = (input: ComponentProps<typeof Tabs>) => (
-    <Show when={layout.ready() && serverSync().ready && (props.canReview() || sync().status === "complete")}>
+    <Show when={layout.ready() && serverSync().ready && (props.canReview() || sync().data.bootstrapSettled)}>
       <Tabs {...input} />
     </Show>
   )
