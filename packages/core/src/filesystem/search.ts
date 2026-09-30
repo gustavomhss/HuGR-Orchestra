@@ -29,9 +29,21 @@ export const ripgrepLayer = Layer.effect(
     const scope = yield* Scope.Scope
     const state = {
       files: [] as string[],
-      directories: [] as string[],
     }
     const directories = new Set<string>()
+    let materialised: string[] | undefined
+    // Materialising the directory list once per discovered file is quadratic in
+    // files x directories, because the set grows monotonically and every entry re-copied it.
+    // Only `find({ type: "directory" })` reads it, so materialise lazily and once.
+    const collectDirectories = (entryPath: string) => {
+      const parts = entryPath.split("/")
+      for (let index = 0; index < parts.length - 1; index++)
+        directories.add(parts.slice(0, index + 1).join("/") + path.sep)
+    }
+    const resolve = () => {
+      if (materialised) return materialised
+      return (materialised = Array.from(directories))
+    }
     yield* ripgrep
       .find({
         cwd: location.directory,
@@ -40,9 +52,7 @@ export const ripgrepLayer = Layer.effect(
         onEntry: (entry) =>
           Effect.sync(() => {
             state.files.push(entry.path)
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
+            collectDirectories(entry.path)
           }),
       })
       .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
@@ -104,8 +114,8 @@ export const ripgrepLayer = Layer.effect(
             input.type === "file"
               ? state.files
               : input.type === "directory"
-                ? state.directories
-                : [...state.files, ...state.directories]
+                ? resolve()
+                : [...state.files, ...resolve()]
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target
             const type = relative.endsWith(path.sep) ? ("directory" as const) : ("file" as const)

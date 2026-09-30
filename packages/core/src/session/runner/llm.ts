@@ -323,8 +323,14 @@ const layer = Layer.effect(
           const stepSettlement = publisher.stepSettlement()
           if (stepSettlement && !publisher.hasProviderError()) {
             const endSnapshot = yield* snapshots.capture()
+            // Both captures bracket a step that ran tools, so they are not interchangeable and
+            // neither may be skipped. But a snapshot id IS the git tree id: when the two trees
+            // are equal, `git diff --name-only <tree> <tree>` provably yields nothing, so the
+            // file list is provably empty and the two extra git processes (diff + check-ignore)
+            // can be skipped. The only consumer of these files iterates `snapshot.files ?? []`,
+            // so an undefined list is indistinguishable from an empty one.
             const files =
-              startSnapshot && endSnapshot
+              startSnapshot && endSnapshot && startSnapshot !== endSnapshot
                 ? yield* snapshots
                     .files({ from: startSnapshot, to: endSnapshot })
                     .pipe(Effect.catch(() => Effect.succeed(undefined)))

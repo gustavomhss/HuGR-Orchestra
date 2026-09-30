@@ -7,7 +7,13 @@ process.env.OPENCODE_PERFORMANCE_RUN_ID ??= `${new Date().toISOString().replace(
 export default {
   ...config,
   testDir: ".",
-  testIgnore: "unit/**",
+  // Benchmarks are .spec.ts. Selecting by match rather than only by ignore keeps Bun-run unit
+  // files out of Playwright's loader: `unit/*.test.ts` and
+  // `timeline-stability/fixture.test.ts` import `bun:test`, and Node's ESM loader rejects the
+  // `bun:` scheme, which aborted collection before any benchmark ran. timeline-stability owns
+  // its own config and is not a benchmark suite.
+  testMatch: "timeline/**/*.spec.ts",
+  testIgnore: "timeline-stability/**",
   outputDir: "../test-results/performance",
   fullyParallel: false,
   workers: 1,

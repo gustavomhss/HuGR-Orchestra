@@ -18,7 +18,12 @@ import { message as cleanMessage } from "@/utils/diffs"
 import { sessionNotFoundError } from "@/utils/server-errors"
 import { rootSession } from "@/utils/session-route"
 import { normalizeSessionInfo } from "@/utils/session"
-import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/session-message"
+import {
+  compareMessages,
+  messageKey,
+  normalizeSessionMessages,
+  normalizeTouchedSessionMessages,
+} from "@/utils/session-message"
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
@@ -148,8 +153,31 @@ function merge<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   return [...items.values()].sort((x, y) => cmp(x.id, y.id))
 }
 
-function reconcileFetched<T extends { id: string }>(
-  fetched: T[],
+/**
+ * Drop part tombstones that can no longer affect anything.
+ *
+ * A `message.part.removed` tombstone is only consulted through `reconcileFetched`, which
+ * applies it as `const item = live.get(id); if (item) result.set(id, item)`. An entry
+ * whose part is absent from the store therefore has no effect on any reconcile outcome,
+ * so removing it cannot change behaviour; it only stops the map growing for the lifetime
+ * of the session. Tombstones for parts still in the store are kept, as is every message
+ * the caller did not report as covered.
+ */
+export function pruneDeadPartTombstones(
+  pending: Map<string, Set<string>>,
+  livePartIDs: (messageID: string) => ReadonlySet<string>,
+  covered: ReadonlySet<string>,
+) {
+  for (const [messageID, parts] of pending) {
+    if (!covered.has(messageID)) continue
+    const live = livePartIDs(messageID)
+    for (const partID of parts) if (!live.has(partID)) parts.delete(partID)
+    if (parts.size === 0) pending.delete(messageID)
+  }
+  return pending
+}
+
+function reconcileFetched<T extends { id: string }>(  fetched: T[],
   current: readonly T[],
   options: {
     touched?: ReadonlySet<string>
@@ -228,7 +256,7 @@ export function createServerSession(
     }
     delete cache.part[messageID]
   }
-  const seen = new Set<string>()
+const seen = new Set<string>()
   const infoSeen = new Set<string>()
   const pinned = new Map<string, number>()
   const generations = new Map<string, object>()
@@ -723,6 +751,13 @@ export function createServerSession(
         }
         orphanParts.delete(sessionID)
       }
+      if (page.complete) {
+        const pending = pendingParts.get(sessionID)
+        if (pending) {
+          pruneDeadPartTombstones(pending, (messageID) => new Set((data.part[messageID] ?? []).map((p) => p.id)), messageIDs)
+          if (pending.size === 0) pendingParts.delete(sessionID)
+        }
+      }
       setMeta("limit", sessionID, messages.length)
       setMeta("cursor", sessionID, merged.cursor)
       setMeta("complete", sessionID, merged.complete)
@@ -898,7 +933,7 @@ export function createServerSession(
       if (message.type === "compaction" && touched.has(message.id) && parentID) touched.add(parentID)
     }
 
-    const normalized = normalizeSessionMessages(reduction.sessionID, reduction.messages)
+    const normalized = normalizeTouchedSessionMessages(reduction.sessionID, reduction.messages, touched)
     batch(() => {
       for (const message of normalized.messages) {
         if (!touched.has(message.id)) continue

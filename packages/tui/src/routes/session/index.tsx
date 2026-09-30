@@ -39,6 +39,7 @@ import type {
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
+import { assistantDuration, isFinalTurn, userStartedAtByID } from "../../util/session"
 import { Dynamic, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "../../context/sdk"
 import { useEditorContext } from "../../context/editor"
@@ -210,6 +211,10 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  // First-wins by id, matching the previous `messages().find((x) => x.role === "user" && x.id === parentID)`
+  // that every AssistantMessage ran. Kept as a Map so the lookup is O(1) per message
+  // instead of a full scan, which made rendering the transcript quadratic.
+  const userStartedAt = createMemo(() => userStartedAtByID(messages()))
   const messagesBeforeRevert = () => {
     const messageID = session()?.revert?.messageID
     if (!messageID) return messages()
@@ -1287,6 +1292,7 @@ export function Session() {
                           last={lastAssistant()?.id === message.id}
                           message={message as AssistantMessage}
                           parts={sync.data.part[message.id] ?? []}
+                          startedAt={userStartedAt().get((message as AssistantMessage).parentID)}
                         />
                       </Match>
                     </Switch>
@@ -1466,25 +1472,27 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: {
+  message: AssistantMessage
+  parts: Part[]
+  last: boolean
+  startedAt: number | undefined
+}) {
   const ctx = use()
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
-  const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
   const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
 
-  const final = createMemo(() => {
-    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
-  })
+  const final = createMemo(() => isFinalTurn(props.message.finish))
 
-  const duration = createMemo(() => {
-    if (!final()) return 0
-    if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
-    if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
-  })
+  const duration = createMemo(() =>
+    assistantDuration({
+      startedAt: props.startedAt,
+      completed: props.message.time.completed,
+      final: final(),
+    }),
+  )
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")

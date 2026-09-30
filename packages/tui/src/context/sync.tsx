@@ -57,6 +57,34 @@ function compareMessage(a: Message, b: Message) {
 
 const messageKey = (message: Message) => message.time.created + message.id
 
+/**
+ * Release every per-session store key for a session that the server reported deleted, together
+ * with the parts belonging to its messages. Without this the entries survived for the process
+ * lifetime: deleting a session kept its whole message list, parts, todos, diffs, status and
+ * prompts resident with no path back. Kept as a standalone function so it can be tested without
+ * depending on store proxy semantics.
+ */
+export function releaseDeletedSession(
+  draft: {
+    message: Record<string, { id: string }[]>
+    part: Record<string, unknown>
+    todo: Record<string, unknown>
+    session_diff: Record<string, unknown>
+    session_status: Record<string, unknown>
+    permission: Record<string, unknown>
+    question: Record<string, unknown>
+  },
+  sessionID: string,
+) {
+  for (const message of draft.message[sessionID] ?? []) delete draft.part[message.id]
+  delete draft.message[sessionID]
+  delete draft.todo[sessionID]
+  delete draft.session_diff[sessionID]
+  delete draft.session_status[sessionID]
+  delete draft.permission[sessionID]
+  delete draft.question[sessionID]
+}
+
 export const {
   context: SyncContext,
   use: useSync,
@@ -271,7 +299,8 @@ export const {
           break
 
         case "session.deleted": {
-          const result = search(store.session, event.properties.info.id, (s) => s.id)
+          const sessionID = event.properties.info.id
+          const result = search(store.session, sessionID, (s) => s.id)
           if (result.found) {
             setStore(
               "session",
@@ -280,6 +309,9 @@ export const {
               }),
             )
           }
+          // The session is gone server-side, so every per-session key is unreachable.
+          setStore(produce((draft) => releaseDeletedSession(draft, sessionID)))
+          fullSyncedSessions.delete(sessionID)
           break
         }
         case "session.updated": {
@@ -653,6 +685,12 @@ export const {
                   draft.part[message.info.id] = parts
                 }
                 for (const message of removed) delete draft.part[message.id]
+                // Any part entry whose message is not in the visible window is unreachable.
+                // `message.removed` (revert) drops a message without touching its parts, and the
+                // loops above only iterate ids the API returned, so those entries used to survive
+                // for the process lifetime. Prune here, where parts are re-fetched authoritatively.
+                for (const messageID of Object.keys(draft.part))
+                  if (!visibleIDs.has(messageID)) delete draft.part[messageID]
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),

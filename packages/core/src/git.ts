@@ -564,6 +564,12 @@ const layer = Layer.effect(
         .map((file) => RelativePath.make(file))
     })
 
+    /**
+     * One `git diff` invocation yields the status letter (`--raw`), the line counts
+     * (`--numstat`) and the hunks (`--patch`) together, so a diff over N files used to cost
+     * 3N sequential processes for the same tree pair. Request all three once and split the
+     * output; each patch is sliced out as exact bytes so nothing is re-serialised.
+     */
     const treeDiff = Effect.fn("Git.tree.diff")(function* (input: {
       repository: Repository
       from: TreeID
@@ -572,48 +578,56 @@ const layer = Layer.effect(
       paths?: readonly RelativePath[]
     }) {
       const paths = input.paths ?? (yield* treeFiles(input))
-      return yield* Effect.forEach(paths, (file) =>
-        Effect.gen(function* () {
-          const statusText = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--name-status",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
-            file,
-          ])).text.trim()
-          const status = statusText.startsWith("A") ? "added" : statusText.startsWith("D") ? "deleted" : "modified"
-          const stats = (yield* repositoryOperation("diff", input.repository, [
-            "diff",
-            "--numstat",
-            "--no-renames",
-            input.from,
-            input.to,
-            "--",
-            file,
-          ])).text.split("\t")
-          const binary = stats[0] === "-" || stats[1] === "-"
-          const patch = binary
-            ? ""
-            : (yield* repositoryOperation("diff", input.repository, [
-                "diff",
-                `--unified=${input.context ?? 3}`,
-                "--no-renames",
-                input.from,
-                input.to,
-                "--",
-                file,
-              ])).text
-          return {
-            path: file,
-            status,
-            additions: binary ? 0 : Number(stats[0] ?? 0),
-            deletions: binary ? 0 : Number(stats[1] ?? 0),
-            patch,
-          } satisfies File.Diff
-        }),
-      )
+      if (paths.length === 0) return []
+      const text = (
+        yield* repositoryOperation("diff", input.repository, [
+          "diff",
+          "--raw",
+          "--numstat",
+          "--patch",
+          "--no-renames",
+          `--unified=${input.context ?? 3}`,
+          input.from,
+          input.to,
+          "--",
+          ...paths,
+        ])
+      ).text
+      const status = new Map<string, string>()
+      const counts = new Map<string, { additions: string; deletions: string }>()
+      const patches = new Map<string, { start: number; end: number }>()
+      let cursor = 0
+      for (const line of text.split("\n")) {
+        const start = cursor
+        cursor = start + line.length + 1
+        if (line.startsWith(":")) {
+          const tab = line.indexOf("\t")
+          status.set(line.slice(tab + 1), line.slice(0, tab).slice(-1))
+          continue
+        }
+        const counted = /^(\d+|-)\t(\d+|-)\t(.+)$/.exec(line)
+        if (counted) {
+          counts.set(counted[3]!, { additions: counted[1]!, deletions: counted[2]! })
+          continue
+        }
+        const header = /^diff --git a\/(.+?) b\/(.+)$/.exec(line)
+        if (header) patches.set(header[2]!, { start, end: text.length })
+      }
+      for (const patch of patches.values())
+        patch.end = text.indexOf("\\ndiff --git ", patch.start) === -1 ? text.length : text.indexOf("\\ndiff --git ", patch.start) + 1
+      return paths.map((file) => {
+        const counted = counts.get(file)
+        const binary = counted === undefined || counted.additions === "-" || counted.deletions === "-"
+        const letter = status.get(file)
+        const span = patches.get(file)
+        return {
+          path: file,
+          status: letter === "A" ? "added" : letter === "D" ? "deleted" : "modified",
+          additions: binary ? 0 : Number(counted?.additions ?? 0),
+          deletions: binary ? 0 : Number(counted?.deletions ?? 0),
+          patch: binary || !span ? "" : text.slice(span.start, span.end),
+        } satisfies File.Diff
+      })
     })
 
     const entry = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, file: RelativePath) {
