@@ -63,6 +63,9 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
     OPENCODE_TEST_HOME: home,
     HOME: home,
+    // CLI directory resolution preserves the shell's logical PWD. A spawned
+    // child must not inherit the test runner's repository path after changing cwd.
+    PWD: home,
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_DATA_HOME: path.join(home, ".local/share"),
     XDG_STATE_HOME: path.join(home, ".local/state"),
@@ -150,6 +153,7 @@ export type AcpHandle = {
   // calls this, so tests only need it when asserting exit behavior.
   readonly close: () => void
   readonly exited: Promise<number>
+  readonly stderr: () => string
 }
 
 export type OpencodeCli = {
@@ -456,11 +460,13 @@ export function withCliFixture<A, E>(
           Effect.promise(async () => {
             const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
             if (typeof ret !== "number") await ret
+            await proc.stdin.flush()
           }),
         receive: Queue.take(responses),
         // proc.stdin.end() is idempotent in Bun; no try/catch needed.
         close: () => proc.stdin.end(),
         exited: proc.exited as Promise<number>,
+        stderr: () => stderrChunks.join(""),
       } satisfies AcpHandle
     })
 
