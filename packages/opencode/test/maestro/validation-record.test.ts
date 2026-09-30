@@ -319,7 +319,7 @@ describe("Maestro validation receipt", () => {
         const input = yield* prepare()
         const test = yield* TestInstance
         const { db } = yield* Database.Service
-        const sandbox = `${test.directory}/.sandboxes/card`
+        const sandbox = path.join(test.directory, ".sandboxes", "card")
         const git = yield* Git.Service
         yield* Effect.promise(() => Bun.write(`${test.directory}/.git/info/exclude`, ".sandboxes/\n"))
         expect((yield* git.run(["worktree", "add", "-b", "sandbox", sandbox], { cwd: test.directory })).exitCode).toBe(
