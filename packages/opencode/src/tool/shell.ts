@@ -1,4 +1,4 @@
-import { Effect, Fiber, Stream } from "effect"
+import { Effect, Fiber, Option, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -540,7 +540,9 @@ export const ShellTool = Tool.define(
           const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
           const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+            handle.exitCode.pipe(
+              Effect.flatMap((code) => Fiber.join(reader).pipe(Effect.as({ kind: "exit" as const, code }))),
+            ),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
@@ -554,7 +556,14 @@ export const ShellTool = Tool.define(
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
           }
 
-          yield* Fiber.join(reader)
+          if (exit.kind !== "exit") {
+            // The leader can exit while descendants still own its output pipes.
+            const drained = yield* Fiber.join(reader).pipe(Effect.timeoutOption("3 seconds"))
+            if (Option.isNone(drained)) {
+              yield* handle.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore)
+              yield* Fiber.interrupt(reader)
+            }
+          }
 
           return exit.kind === "exit" ? exit.code : null
         }),

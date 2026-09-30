@@ -17,7 +17,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Plugin } from "../../src/plugin"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
@@ -1007,6 +1007,71 @@ describe("tool.shell permissions", () => {
 })
 
 describe("tool.shell abort", () => {
+  const unix = process.platform === "win32" ? it.live.skip : it.live
+
+  unix(
+    "times out while a descendant holds output after the shell exits",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const result = yield* run({ command: "sleep 60 & printf retained", timeout: 500 })
+          expect(result.output).toContain("retained")
+          expect(result.output).toContain("shell tool terminated command after exceeding timeout")
+        }),
+      ),
+    15_000,
+  )
+
+  unix(
+    "aborts after the shell exits and kills a descendant ignoring SIGTERM",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const controller = new AbortController()
+          let descendant = 0
+          yield* Effect.addFinalizer(() =>
+            descendant
+              ? Effect.try({ try: () => process.kill(descendant, "SIGKILL"), catch: (cause) => cause }).pipe(Effect.ignore)
+              : Effect.void,
+          )
+          const result = yield* run(
+            {
+              command: `${bin} -e ${squote('process.on("SIGTERM",()=>{});console.log("descendant:"+process.pid);setInterval(()=>{},60000)')} & printf 'leader:%s\\n' "$$"`,
+            },
+            {
+              ...ctx,
+              abort: controller.signal,
+              metadata: (input) =>
+                Effect.gen(function* () {
+                  if (controller.signal.aborted) return
+                  const output = (input.metadata as { output?: string }).output ?? ""
+                  const leader = output.match(/leader:(\d+)/)?.[1]
+                  const child = output.match(/descendant:(\d+)/)?.[1]
+                  if (!leader || !child) return
+                  descendant = Number(child)
+                  expect(processState(descendant)).toMatch(/^[^Z]/)
+                  yield* pollWithTimeout(
+                    Effect.sync(() => (processState(Number(leader)) === "" ? true : undefined)),
+                    "shell leader did not exit",
+                  ).pipe(Effect.orDie)
+                  controller.abort()
+                }),
+            },
+          )
+          expect(result.output).toContain("User aborted the command")
+          expect(result.output).not.toContain("exceeding timeout")
+          expect(descendant).toBeGreaterThan(0)
+          yield* pollWithTimeout(
+            Effect.sync(() => (/^(Z|$)/.test(processState(descendant)) ? true : undefined)),
+            "shell descendant survived abort",
+          )
+        }),
+      ),
+    15_000,
+  )
+
   it.live(
     "preserves output when aborted",
     () =>
@@ -1130,6 +1195,13 @@ describe("tool.shell abort", () => {
     ),
   )
 })
+
+function processState(pid: number) {
+  const result = Bun.spawnSync(["ps", "-p", String(pid), "-o", "stat="])
+  expect([0, 1]).toContain(result.exitCode)
+  expect(result.stderr.toString()).toBe("")
+  return result.stdout.toString().trim()
+}
 
 describe("tool.shell truncation", () => {
   it.live("truncates output exceeding line limit", () =>
