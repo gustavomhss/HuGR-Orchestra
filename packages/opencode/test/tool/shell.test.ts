@@ -1087,7 +1087,9 @@ describe("tool.shell abort", () => {
   )
 
   it.live(
-    "aborts after the shell exits and kills a descendant ignoring SIGTERM",
+    process.platform === "win32"
+      ? "aborts after the shell exits with attached Windows child cleanup"
+      : "aborts after the shell exits and kills a descendant ignoring SIGTERM",
     () =>
       runIn(
         projectRoot,
@@ -1112,7 +1114,7 @@ describe("tool.shell abort", () => {
           )
           yield* fs.writeWithDirs(
             path.join(tmp, "parent.cjs"),
-            `require("node:child_process").spawn(process.execPath,[${JSON.stringify(path.join(tmp, "child.cjs"))}],{stdio:"inherit"}).unref()`,
+            `const fs=require("node:fs");const watcher=fs.watch(${JSON.stringify(tmp)},()=>{if(fs.existsSync(${JSON.stringify(path.join(tmp, "release"))})){watcher.close();process.exit(0)}});require("node:child_process").spawn(process.execPath,[${JSON.stringify(path.join(tmp, "child.cjs"))}],{stdio:"inherit"})`,
           )
           const command = `node ${quote(path.join(tmp, "parent.cjs"))}`
           const work = yield* run(
@@ -1130,6 +1132,7 @@ describe("tool.shell abort", () => {
                   descendant = Number(child)
                   expect(processState(descendant)).toMatch(/^[^Z]/)
                   yield* Deferred.succeed(seen, undefined)
+                  yield* Effect.never
                 }),
             },
           ).pipe(
@@ -1149,10 +1152,17 @@ describe("tool.shell abort", () => {
             ),
           )
           const handle = yield* Deferred.await(spawned)
-          yield* pollWithTimeout(
-            Effect.sync(() => (/^(Z|$)/.test(processState(handle.pid)) ? true : undefined)),
-            "shell leader did not exit",
-          )
+          expect(processState(descendant)).toMatch(/^[^Z]/)
+          yield* fs.writeWithDirs(path.join(tmp, "release"), "")
+          expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+          if (process.platform === "win32") {
+            // Node's Windows Job Object owns attached children until the parent exits.
+            yield* pollWithTimeout(
+              Effect.sync(() => (processState(descendant) === "" ? true : undefined)),
+              "attached Windows child survived parent exit",
+            )
+          }
+          if (process.platform !== "win32") expect(processState(descendant)).toMatch(/^[^Z]/)
           controller.abort()
           const result = yield* Fiber.join(work)
           expect(result.output).toContain("User aborted the command")

@@ -86,6 +86,7 @@ jobs:
 
       - name: Build Windows opencode prerequisites
         if: runner.os == 'Windows' && !cancelled()
+        timeout-minutes: 20
         run: bun turbo build --filter='opencode^...'
 
       - name: Run Windows opencode shard

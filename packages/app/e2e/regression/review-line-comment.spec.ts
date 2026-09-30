@@ -87,7 +87,10 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
 test("keeps a focused comment button usable when the pointer leaves", async ({ page }) => {
   const review = page.locator('[data-component="session-review"]')
   const comment = review.getByRole("button", { name: "Comment", exact: true })
-  await review.locator('[data-column-number="1"]').last().hover()
+  const lineNumber = review.locator('[data-column-number="1"]').last()
+  await lineNumber.hover()
+  await expect(lineNumber).toHaveAttribute("data-hovered", "")
+  await expect(comment).toHaveCount(1)
   await expect(comment).toHaveCSS("pointer-events", "auto")
   await comment.focus()
   await expect(comment).toBeFocused()
@@ -162,14 +165,14 @@ async function openReview(page: Page) {
     }),
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-  await transport.waitForConnection()
-  await expectSessionTitle(page, title)
-  const changes = page.getByRole("tab", { name: "Changes" })
   const diffResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "GET" && response.ok() && new URL(response.url()).pathname === "/api/vcs/diff",
   )
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await transport.waitForConnection()
+  await expectSessionTitle(page, title)
+  const changes = page.getByRole("tab", { name: "Changes" })
   await changes.click()
   expect((await (await diffResponse).json()).data).toHaveLength(1)
   await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName(/Files Changed/)
