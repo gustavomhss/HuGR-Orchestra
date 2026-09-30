@@ -29,8 +29,12 @@ jobs:
         settings:
           - name: linux
             host: ubuntu-latest
-          - name: windows
+          - name: windows 1/2
             host: windows-latest
+            shard: "1/2"
+          - name: windows 2/2
+            host: windows-latest
+            shard: "2/2"
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -67,10 +71,31 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
+        if: runner.os == 'Linux'
         timeout-minutes: 20
         run: GITHUB_ACTIONS=false bun turbo test --continue=always
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
+
+      - name: Run remaining Windows unit tests
+        if: matrix.settings.shard == '1/2'
+        timeout-minutes: 20
+        run: GITHUB_ACTIONS=false bun turbo test --continue=always --filter='!opencode'
+        env:
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+
+      - name: Build Windows opencode prerequisites
+        if: runner.os == 'Windows' && !cancelled()
+        run: bun turbo build --filter='opencode^...'
+
+      - name: Run Windows opencode shard
+        if: runner.os == 'Windows' && !cancelled()
+        working-directory: packages/opencode
+        timeout-minutes: 20
+        run: bun run test --shard=${{ matrix.settings.shard }}
+        env:
+          GITHUB_ACTIONS: "false"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
 
       - name: Check generated client
         if: runner.os == 'Linux'
