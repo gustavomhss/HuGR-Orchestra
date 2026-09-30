@@ -8,21 +8,23 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Schema } from "effect"
+import { mkdir } from "node:fs/promises"
 import { Agent } from "../../src/agent/agent"
 import { Config } from "../../src/config/config"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Git } from "../../src/git"
-import { workCardHash } from "../../src/maestro/validation-record"
+import { readValidation, workCardHash } from "../../src/maestro/validation-record"
 import { recordContext } from "../../src/maestro/context-record"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
 import { Session } from "../../src/session/session"
 import { MaestroPresentApprovalTool } from "../../src/tool/maestro-approval"
 import { MaestroRequestReviewTool } from "../../src/tool/maestro-review"
+import { MaestroRecordValidationTool } from "../../src/tool/maestro-validation"
 import type { TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "../../src/tool/truncate"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => disposeAllInstances())
@@ -105,13 +107,14 @@ function promptOps(onPrompt: (input: SessionPrompt.PromptInput) => void): TaskPr
 
 describe("Maestro evidence tools", () => {
   it.instance(
-    "sends Lucy full bound multi-commit diff",
+    "sends full repository diff from nested Session and rejects foreign or dirty context",
     () =>
       Effect.gen(function* () {
-        const { chat, assistant } = yield* seed()
+        const test = yield* TestInstance
+        yield* Effect.promise(() => mkdir(`${test.directory}/nested`))
+        const { chat, assistant } = yield* provideInstance(`${test.directory}/nested`)(seed())
         const events = yield* EventV2Bridge.Service
         const git = yield* Git.Service
-        const test = yield* TestInstance
         const workCard = "# Card\nReview full branch diff.\n"
         const base = (yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })).text().trim()
         yield* Effect.promise(() => Bun.write(`${test.directory}/first.txt`, "first\n"))
@@ -199,9 +202,105 @@ describe("Maestro evidence tools", () => {
         expect(prompt).toContain(`\"baseSHA\":\"${base}\"`)
         expect(prompt).toContain("first.txt")
         expect(prompt).toContain("second.txt")
+        const artifact = Schema.decodeUnknownSync(
+          Schema.fromJsonString(
+            Schema.Struct({
+              baseSHA: Schema.String,
+              headSHA: Schema.String,
+              changedPaths: Schema.Array(Schema.String),
+              bytes: Schema.String,
+            }),
+          ),
+        )(/^artifact JSON: (.+)$/m.exec(prompt)?.[1])
+        const full = yield* git.run(
+          [
+            "diff",
+            "--binary",
+            "--full-index",
+            "--no-ext-diff",
+            "--no-renames",
+            "--src-prefix=a/",
+            "--dst-prefix=b/",
+            base,
+            context.headSHA,
+            "--",
+            ".",
+          ],
+          { cwd: test.directory },
+        )
+        expect(artifact.baseSHA).toBe(base)
+        expect(artifact.headSHA).toBe(context.headSHA)
+        expect(artifact.changedPaths).toEqual(["first.txt", "second.txt"])
+        expect(Buffer.from(artifact.bytes, "base64").equals(full.stdout)).toBe(true)
+
+        const sessions = yield* Session.Service
+        const other = yield* sessions.create({ title: "foreign context" })
+        const caller = {
+          sessionID: other.id,
+          messageID: assistant.id,
+          agent: "maestro",
+          agentID: "maestro",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        }
+        const validationTool = yield* MaestroRecordValidationTool
+        const foreignValidation = yield* validationTool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute(
+              {
+                planRevisionID,
+                contextRecordID: context.id,
+                contextHash: context.contextHash,
+                projectID: other.projectID,
+                workCardID: "foreign",
+                workCard,
+                routedMemberID: "charlie",
+                validatorVersion: "validation-v1",
+                checks: [{ id: "typecheck", status: "PASS", detail: "clean" }],
+              },
+              caller,
+            ),
+          ),
+          Effect.exit,
+        )
+        expect(Exit.isFailure(foreignValidation)).toBe(true)
+        if (Exit.isFailure(foreignValidation))
+          expect(Cause.pretty(foreignValidation.cause)).toContain("Validation context does not match Session")
+        const validation = yield* readValidation(validationRecordID)
+        if (!validation) throw new Error("missing validation")
+        const foreignID = EventV2.ID.make("evt_validation_foreign_context")
+        yield* events.publish(
+          MaestroEvent.Validation.RecordedV3,
+          Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV3.data)({ ...validation, sessionID: other.id }),
+          { id: foreignID },
+        )
+        const foreignReview = yield* tool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute({ validationRecordID: foreignID, workCard, reviewMethodVersion: "review-v1" }, caller),
+          ),
+          Effect.exit,
+        )
+        expect(Exit.isFailure(foreignReview)).toBe(true)
+        if (Exit.isFailure(foreignReview))
+          expect(Cause.pretty(foreignReview.cause)).toContain("Review delegation context is stale or dirty")
+        yield* Effect.promise(() => Bun.write(`${test.directory}/first.txt`, "dirty sibling\n"))
+        const dirtyReview = yield* tool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute(
+              { validationRecordID, workCard, reviewMethodVersion: "review-v1" },
+              { ...caller, sessionID: chat.id },
+            ),
+          ),
+          Effect.exit,
+        )
+        expect(Exit.isFailure(dirtyReview)).toBe(true)
+        if (Exit.isFailure(dirtyReview))
+          expect(Cause.pretty(dirtyReview.cause)).toContain("Review delegation context is stale or dirty")
       }),
     { git: true },
-    15_000,
+    30_000,
   )
 
   it.instance(

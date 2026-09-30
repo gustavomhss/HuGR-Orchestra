@@ -43,17 +43,21 @@ export const MaestroRequestReviewTool = Tool.define(
           if (!validation.contextRecordID || !validation.contextHash) {
             return yield* Effect.fail(new Error("Review delegation requires bound context"))
           }
+          const parent = yield* sessions.get(SessionID.make(ctx.sessionID))
           const context = yield* readContext(validation.contextRecordID)
           if (
             !context ||
+            context.sessionID !== parent.id ||
+            context.planRevisionID !== validation.planRevisionID ||
+            context.projectID !== parent.projectID ||
+            validation.projectID !== parent.projectID ||
+            context.directory !== parent.directory ||
             context.contextHash !== validation.contextHash ||
             context.changedPaths.length > 0 ||
             !(yield* contextIsCurrent(context))
           ) {
             return yield* Effect.fail(new Error("Review delegation context is stale or dirty"))
           }
-          const child = yield* sessions.create({ parentID: ctx.sessionID, agent: "lucy" })
-          const parent = yield* sessions.get(SessionID.make(ctx.sessionID))
           const head = yield* git.run(["rev-parse", "HEAD"], { cwd: parent.directory })
           if (head.exitCode !== 0) return yield* Effect.fail(new Error("Review artifact requires Git HEAD"))
           const headSHA = head.text().trim()
@@ -68,7 +72,7 @@ export const MaestroRequestReviewTool = Tool.define(
           const baseSHA = validation.reviewBaseSHA
           const names = yield* git.run(
             ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", baseSHA, headSHA, "--", "."],
-            { cwd: parent.directory },
+            { cwd: worktree },
           )
           const changedPaths = names.text().split("\0").filter(Boolean)
           const diff = yield* git.run(
@@ -85,11 +89,14 @@ export const MaestroRequestReviewTool = Tool.define(
               "--",
               ".",
             ],
-            { cwd: parent.directory },
+            { cwd: worktree },
           )
+          if (names.exitCode !== 0 || names.truncated || diff.exitCode !== 0 || diff.truncated)
+            return yield* Effect.fail(new Error("Review artifact diff unavailable"))
           const artifactBytes = Buffer.from(diff.stdout).toString("base64")
           const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
           if (!ops) return yield* Effect.fail(new Error("Review delegation requires promptOps"))
+          const child = yield* sessions.create({ parentID: ctx.sessionID, agent: "lucy" })
           const model = ctx.extra?.model as { providerID?: string; api?: { id?: string } } | undefined
           const result = yield* Effect.exit(
             ops.prompt({

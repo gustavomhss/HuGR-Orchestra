@@ -241,6 +241,18 @@ it.instance(
         authorizationID: granted.id,
         routedMemberID: "charlie",
       })
+      yield* Effect.promise(() => Bun.write(`${test.directory}/stale.txt`, "after reservation\n"))
+      expect(yield* reserveDispatch({ sessionID: session.id, authorizationID: granted.id, permission: [] })).toEqual(
+        reservations[0],
+      )
+      expect(
+        yield* reserveDispatch({
+          sessionID: session.id,
+          authorizationID: granted.id,
+          permission: [],
+          requireCurrent: true,
+        }).pipe(Effect.flip),
+      ).toMatchObject({ reason: "context-not-current" })
     }),
   { git: true },
   15_000,

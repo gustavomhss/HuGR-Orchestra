@@ -10,7 +10,6 @@ import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { Effect, Schema } from "effect"
 import { eq } from "drizzle-orm"
 import path from "node:path"
-import { mkdir } from "node:fs/promises"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
 import { SessionID } from "@/session/schema"
@@ -22,7 +21,7 @@ import {
   reviewPolicyHash,
 } from "../../src/maestro/validation-record"
 import { nativeProfiles, roster } from "../../src/maestro/roster"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -72,20 +71,21 @@ const prepare = Effect.fn("MaestroValidationTest.prepare")(function* (sessionID 
   return { ...base, sessionID, projectID: project.id }
 })
 
-const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
+const artifact = Effect.fn("MaestroValidationTest.artifact")(function* (inputDirectory?: string) {
   const test = yield* TestInstance
+  const directory = inputDirectory ?? test.directory
   const { db } = yield* Database.Service
   const events = yield* EventV2Bridge.Service
   const git = yield* Git.Service
-  const baseCommit = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
-  const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: test.directory })
-  yield* Effect.promise(() => Bun.write(`${test.directory}/proof.txt`, "proof\n"))
-  yield* git.run(["add", "proof.txt"], { cwd: test.directory })
-  yield* git.run(["commit", "-m", "proof"], { cwd: test.directory })
-  yield* Effect.promise(() => Bun.write(`${test.directory}/proof-2.txt`, "proof 2\n"))
-  yield* git.run(["add", "proof-2.txt"], { cwd: test.directory })
-  yield* git.run(["commit", "-m", "proof 2"], { cwd: test.directory })
-  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
+  const baseCommit = yield* git.run(["rev-parse", "HEAD"], { cwd: directory })
+  const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
+  yield* Effect.promise(() => Bun.write(`${directory}/proof.txt`, "proof\n"))
+  yield* git.run(["add", "proof.txt"], { cwd: directory })
+  yield* git.run(["commit", "-m", "proof"], { cwd: directory })
+  yield* Effect.promise(() => Bun.write(`${directory}/proof-2.txt`, "proof 2\n"))
+  yield* git.run(["add", "proof-2.txt"], { cwd: directory })
+  yield* git.run(["commit", "-m", "proof 2"], { cwd: directory })
+  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: directory })
   const names = yield* git.run(
     [
       "diff",
@@ -99,7 +99,7 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
       ".",
     ],
     {
-      cwd: test.directory,
+      cwd: directory,
     },
   )
   const diff = yield* git.run(
@@ -116,7 +116,7 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
       "--",
       ".",
     ],
-    { cwd: test.directory },
+    { cwd: directory },
   )
   const project = yield* db.select().from(ProjectTable).get().pipe(Effect.orDie)
   if (!project) throw new Error("missing test project")
@@ -127,7 +127,7 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
       sessionID: base.sessionID,
       planRevisionID: base.planRevisionID,
       projectID: project.id,
-      directory: test.directory,
+      directory,
       mode: "UNGROUNDED",
       branch: "test",
       headSHA: head.text().trim(),
@@ -168,6 +168,10 @@ describe("Maestro validation receipt", () => {
         expect(receipt.projectID).toBe(input.projectID)
         expect(row?.type).toBe(EventV2.versionedType(MaestroEvent.Validation.RecordedV3.type, 3))
         expect(yield* readValidation(receipt.id)).toEqual(receipt)
+        expect(yield* recordValidation(input)).toEqual(receipt)
+        expect(
+          yield* recordValidation({ ...input, workCard: `${input.workCard}changed\n` }).pipe(Effect.flip),
+        ).toMatchObject({ _tag: "MaestroValidationConflict" })
         expect(receipt.actor).toEqual({
           version: "rfc8785-v1",
           bytes: `{"memberId":"maestro","projectId":"${input.projectID}","sessionId":"${input.sessionID}"}`,
@@ -309,22 +313,34 @@ describe("Maestro validation receipt", () => {
   )
 
   it.instance(
-    "binds Lucy artifact to registered sandbox root",
+    "binds Lucy artifact to registered nested Git sandbox root",
     () =>
       Effect.gen(function* () {
         const input = yield* prepare()
         const test = yield* TestInstance
         const { db } = yield* Database.Service
-        const main = `${test.directory}/main-worktree`
-        yield* Effect.promise(() => mkdir(main))
-        yield* db
-          .update(ProjectTable)
-          .set({ worktree: AbsolutePath.make(main), sandboxes: [AbsolutePath.make(test.directory)] })
+        const sandbox = `${test.directory}/.sandboxes/card`
+        const git = yield* Git.Service
+        yield* Effect.promise(() => Bun.write(`${test.directory}/.git/info/exclude`, ".sandboxes/\n"))
+        expect((yield* git.run(["worktree", "add", "-b", "sandbox", sandbox], { cwd: test.directory })).exitCode).toBe(
+          0,
+        )
+        yield* provideInstance(sandbox)(Effect.void)
+        const project = yield* db
+          .select()
+          .from(ProjectTable)
           .where(eq(ProjectTable.id, input.projectID))
+          .get()
+          .pipe(Effect.orDie)
+        expect(project?.sandboxes).toContain(AbsolutePath.make(sandbox))
+        yield* db
+          .update(SessionTable)
+          .set({ directory: AbsolutePath.make(sandbox) })
+          .where(eq(SessionTable.id, SessionID.make(input.sessionID)))
           .run()
           .pipe(Effect.orDie)
         const validation = yield* recordValidation(input)
-        const evidence = yield* artifact()
+        const evidence = yield* artifact(sandbox)
         const receipt = yield* recordReview({
           sessionID: input.sessionID,
           validationRecordID: validation.id,

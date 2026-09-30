@@ -27,7 +27,7 @@ import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "../../src/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { disposeAllInstances } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -267,6 +267,25 @@ it.instance(
         time: { created: Date.now() },
         finish: "stop",
       }
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(`${test.directory}/child-change.txt`, "authorized work\n"))
+      const intermediate = {
+        ...completed,
+        id: MessageID.ascending(),
+        finish: "tool-calls",
+        time: { created: completed.time.created - 1 },
+      }
+      yield* sessions.updateMessage(intermediate)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: intermediate.id,
+        sessionID: child.id,
+        type: "text",
+        text: "intermediate",
+      })
+      const continuing = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(continuing)).toBe(true)
+      if (Exit.isFailure(continuing)) expect(Cause.pretty(continuing.cause)).toContain("reserved-child-incomplete")
       yield* sessions.updateMessage(completed)
       yield* sessions.updatePart({
         id: PartID.ascending(),
@@ -278,6 +297,54 @@ it.instance(
       const replay = yield* def.execute(params, context)
       expect(replay.metadata.sessionId).toBe(child.id)
       expect(replay.output).toContain("done")
+      expect(replay.output).not.toContain("intermediate")
+      expect(prompts).toBe(1)
+      const newer = {
+        ...completed,
+        id: MessageID.ascending(),
+        finish: undefined,
+        time: { created: completed.time.created + 1 },
+      }
+      yield* sessions.updateMessage(newer)
+      const unfinished = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(unfinished)).toBe(true)
+      if (Exit.isFailure(unfinished)) expect(Cause.pretty(unfinished.cause)).toContain("reserved-child-incomplete")
+      yield* sessions.updateMessage({ ...newer, finish: "unknown" })
+      const unknown = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(unknown)).toBe(true)
+      if (Exit.isFailure(unknown)) expect(Cause.pretty(unknown.cause)).toContain("reserved-child-incomplete")
+      yield* sessions.updateMessage({
+        ...newer,
+        finish: "stop",
+        error: { name: "UnknownError", data: { message: "failed" } },
+      })
+      const failed = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(failed)).toBe(true)
+      if (Exit.isFailure(failed)) expect(Cause.pretty(failed.cause)).toContain("reserved-child-incomplete")
+      yield* sessions.updateMessage({ ...newer, finish: "stop" })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: newer.id,
+        sessionID: child.id,
+        type: "tool",
+        tool: "shell",
+        callID: "failed-tool",
+        metadata: { providerExecuted: true },
+        state: { status: "error", input: {}, error: "tool failed", time: { start: 1, end: 2 } },
+      })
+      const toolFailed = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(toolFailed)).toBe(true)
+      if (Exit.isFailure(toolFailed)) expect(Cause.pretty(toolFailed.cause)).toContain("reserved-child-incomplete")
+      yield* sessions.removeMessage({ sessionID: child.id, messageID: newer.id })
+      const background = yield* BackgroundJob.Service
+      const finish = yield* Deferred.make<void>()
+      yield* background.start({ id: child.id, type: "task", run: Deferred.await(finish).pipe(Effect.as("done")) })
+      const running = yield* def.execute(params, context).pipe(Effect.exit)
+      expect(Exit.isFailure(running)).toBe(true)
+      if (Exit.isFailure(running)) expect(Cause.pretty(running.cause)).toContain("reserved-child-incomplete")
+      yield* Deferred.succeed(finish, undefined)
+      yield* background.wait({ id: child.id })
+      expect((yield* def.execute(params, context)).output).toContain("done")
       expect(prompts).toBe(1)
       const changed = yield* Effect.exit(
         def.execute(

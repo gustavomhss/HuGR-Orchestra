@@ -52,24 +52,12 @@ export const reserveDispatch = Effect.fn("MaestroDispatch.reserve")(function* (i
   sessionID: string
   authorizationID: string
   permission: readonly { permission: string; pattern: string; action: "allow" | "deny" | "ask" }[]
+  requireCurrent?: boolean
 }) {
   const authorization = yield* readAuthorization(input.authorizationID)
   if (!authorization) return yield* new DispatchRejectedError({ reason: "authorization-not-found" })
   if (authorization.sessionID !== input.sessionID)
     return yield* new DispatchRejectedError({ reason: "session-mismatch" })
-  const validation = yield* readValidation(authorization.validationRecordID)
-  const context = validation?.contextRecordID ? yield* readContext(validation.contextRecordID) : undefined
-  if (
-    !validation ||
-    !context ||
-    validation.sessionID !== authorization.sessionID ||
-    validation.contextHash !== context.contextHash
-  ) {
-    return yield* new DispatchRejectedError({ reason: "authorization-evidence-mismatch" })
-  }
-  if (context.changedPaths.length > 0 || !(yield* contextIsCurrent(context))) {
-    return yield* new DispatchRejectedError({ reason: "context-not-current" })
-  }
   const suffix = createHash("sha256").update(input.authorizationID, "utf8").digest("hex")
   const id = EventV2.ID.make(`evt_maestro_dispatch_${suffix}`)
   const wanted = {
@@ -81,6 +69,32 @@ export const reserveDispatch = Effect.fn("MaestroDispatch.reserve")(function* (i
     taskIntentHash: authorization.taskIntentHash,
     permission: [...input.permission],
   }
+  const existing = yield* readReservation(id)
+  const replay = existing
+    ? yield* Effect.try({
+        try: () => reservation(existing, id, wanted),
+        catch: (error) => error,
+      })
+    : undefined
+  // Replaying a child result does not execute work against the original repository snapshot.
+  if (replay && !input.requireCurrent) return replay
+  const validation = yield* readValidation(authorization.validationRecordID)
+  const context = validation?.contextRecordID ? yield* readContext(validation.contextRecordID) : undefined
+  if (
+    !validation ||
+    !context ||
+    validation.sessionID !== authorization.sessionID ||
+    context.sessionID !== authorization.sessionID ||
+    context.projectID !== authorization.projectID ||
+    context.planRevisionID !== validation.planRevisionID ||
+    validation.contextHash !== context.contextHash
+  ) {
+    return yield* new DispatchRejectedError({ reason: "authorization-evidence-mismatch" })
+  }
+  if (context.changedPaths.length > 0 || !(yield* contextIsCurrent(context))) {
+    return yield* new DispatchRejectedError({ reason: "context-not-current" })
+  }
+  if (replay) return replay
   const events = yield* EventV2Bridge.Service
   return yield* events.publish(MaestroEvent.Dispatch.ReservedV2, wanted, { id }).pipe(
     Effect.map((event) => ({ id: event.id, ...event.data })),

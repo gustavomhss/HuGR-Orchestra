@@ -350,6 +350,14 @@ export const TaskTool = Tool.define(
       if (reserved && (reserved.parentID !== ctx.sessionID || reserved.agent !== nextID)) {
         return yield* Effect.fail(new Error("Governed Task denied: reservation-child-mismatch"))
       }
+      if (params.authorizationID && !reserved) {
+        yield* reserveDispatch({
+          sessionID: ctx.sessionID,
+          authorizationID: params.authorizationID,
+          permission: childPermissions,
+          requireCurrent: true,
+        })
+      }
       const session = governedChildID ? reserved : resumed
       const permissionSnapshot = reservedChildPermissions
       if (
@@ -429,10 +437,26 @@ export const TaskTool = Tool.define(
       if (governedChildID && reserved) {
         if (!replayReserved) return yield* Effect.fail(new Error("Governed Task denied: reserved-child-incomplete"))
         const history = yield* MessageV2.stream(governedChildID)
-        const completed = history.findLast(
-          (message) => message.info.role === "assistant" && message.info.finish !== undefined && !message.info.error,
-        )
-        if (!completed && requireCompletedReplay) {
+        const completed = requireCompletedReplay
+          ? history[0]
+          : history.findLast(
+              (message) =>
+                message.info.role === "assistant" && message.info.finish !== undefined && !message.info.error,
+            )
+        const job = requireCompletedReplay ? yield* background.get(governedChildID) : undefined
+        if (
+          requireCompletedReplay &&
+          (!completed ||
+            completed.info.role !== "assistant" ||
+            !completed.info.finish ||
+            ["tool-calls", "unknown"].includes(completed.info.finish) ||
+            completed.info.error ||
+            completed.info.parentID !== history.find((message) => message.info.role === "user")?.info.id ||
+            completed.parts.some(
+              (part) => part.type === "tool" && (part.state.status !== "completed" || !part.metadata?.providerExecuted),
+            ) ||
+            (job && job.status !== "completed"))
+        ) {
           return yield* Effect.fail(new Error("Governed Task denied: reserved-child-incomplete"))
         }
         const output = completed?.parts.findLast((part) => part.type === "text")?.text ?? ""

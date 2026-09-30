@@ -90,23 +90,24 @@ export const contextIsCurrent = Effect.fn("MaestroContext.isCurrent")(function* 
 
 const currentEvidence = Effect.fn("MaestroContext.currentEvidence")(function* (directory: string) {
   const git = yield* Git.Service
-  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: directory })
+  const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
+  const worktree = root.text().trim()
+  if (root.exitCode !== 0 || !worktree) return undefined
+  const head = yield* git.run(["rev-parse", "HEAD"], { cwd: worktree })
   if (head.exitCode !== 0) return undefined
-  const diff = yield* git.run(["diff", "--binary", "HEAD", "--", "."], { cwd: directory })
-  const untracked = yield* git.run(["ls-files", "--others", "--exclude-standard", "-z"], { cwd: directory })
-  if (diff.exitCode !== 0 || diff.truncated || untracked.exitCode !== 0) return undefined
-  const untrackedFiles = yield* Effect.forEach(
-    untracked.text().split("\0").filter(Boolean).sort(),
-    (file) =>
-      Effect.promise(() => Bun.file(path.join(directory, file)).arrayBuffer()).pipe(
-        Effect.map((bytes) => ({ file, sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex") })),
-      ),
+  const diff = yield* git.run(["diff", "--binary", "--no-ext-diff", "HEAD", "--", "."], { cwd: worktree })
+  const untracked = yield* git.run(["ls-files", "--others", "--exclude-standard", "-z"], { cwd: worktree })
+  if (diff.exitCode !== 0 || diff.truncated || untracked.exitCode !== 0 || untracked.truncated) return undefined
+  const untrackedFiles = yield* Effect.forEach(untracked.text().split("\0").filter(Boolean).sort(), (file) =>
+    Effect.promise(() => Bun.file(path.join(worktree, file)).arrayBuffer()).pipe(
+      Effect.map((bytes) => ({ file, sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex") })),
+    ),
   )
   return {
     directory,
-    branch: (yield* git.branch(directory)) ?? "DETACHED",
+    branch: (yield* git.branch(worktree)) ?? "DETACHED",
     headSHA: head.text().trim(),
-    changedPaths: (yield* git.status(directory)).map((item) => item.file).sort(),
+    changedPaths: (yield* git.status(worktree)).map((item) => item.file).sort(),
     diffSHA256: createHash("sha256").update(diff.stdout).digest("hex"),
     untrackedFiles,
   }

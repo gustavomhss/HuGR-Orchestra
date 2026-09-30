@@ -208,10 +208,14 @@ const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!project) return yield* new ValidationRejectedError({ reason: "session-project-absent" })
+  const git = yield* Git.Service
+  const toplevel = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: session.directory })
+  if (toplevel.exitCode !== 0 || !toplevel.text().trim())
+    return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   const roots = [project.worktree, ...project.sandboxes]
-  const matches = yield* Effect.forEach(roots, (root) => containsPath(root, session.directory))
+  const matches = yield* Effect.forEach(roots, (root) => samePath(root, toplevel.text().trim()))
   const root = roots[matches.findIndex(Boolean)]
-  if (!root) {
+  if (!root || !(yield* containsPath(root, session.directory))) {
     return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   }
   return { session, project, root }
@@ -351,6 +355,10 @@ export const recordReview = Effect.fn("MaestroReview.record")(function* (input: 
     const context = yield* readContext(record.contextRecordID)
     if (
       !context ||
+      context.sessionID !== trusted.session.id ||
+      context.projectID !== trusted.session.projectID ||
+      context.directory !== trusted.session.directory ||
+      context.planRevisionID !== record.planRevisionID ||
       context.contextHash !== record.contextHash ||
       context.changedPaths.length > 0 ||
       artifact.headSHA !== context.headSHA ||
@@ -460,6 +468,9 @@ const requireArtifact = Effect.fn("MaestroReview.requireArtifact")(function* (
     return yield* new ReviewRejectedError({ reason: "malformed-artifact-bytes" })
   }
   const git = yield* Git.Service
+  const status = yield* git.run(["status", "--porcelain=v1", "--untracked-files=all"], { cwd: directory })
+  if (status.exitCode !== 0 || status.truncated || status.text().trim())
+    return yield* new ReviewRejectedError({ reason: "artifact-context-mismatch" })
   const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
   const worktree = root.text().trim()
   if (root.exitCode !== 0 || !worktree) return yield* new ReviewRejectedError({ reason: "git-root-unavailable" })
@@ -484,6 +495,9 @@ const requireArtifact = Effect.fn("MaestroReview.requireArtifact")(function* (
     cwd: worktree,
   })
   if (parentage.exitCode !== 0) return yield* new ReviewRejectedError({ reason: "artifact-parentage-mismatch" })
+  const currentHead = yield* git.run(["rev-parse", "HEAD"], { cwd: worktree })
+  if (currentHead.exitCode !== 0 || currentHead.text().trim() !== artifact.headSHA)
+    return yield* new ReviewRejectedError({ reason: "artifact-context-mismatch" })
   const names = yield* git.run(
     ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", artifact.baseSHA, artifact.headSHA, "--", "."],
     {

@@ -95,6 +95,13 @@ export const MaestroRecordValidationTool = Tool.define(
             .pipe(Effect.orDie)
           if (!sessionRow) return yield* Effect.fail(new Error("Validation session not found"))
           const session = Session.fromRow(sessionRow)
+          if (
+            plan.sessionID !== session.id ||
+            context.sessionID !== session.id ||
+            context.projectID !== session.projectID ||
+            context.directory !== session.directory
+          )
+            return yield* Effect.fail(new Error("Validation context does not match Session"))
           const record = yield* recordValidation({
             planRevisionID: params.planRevisionID,
             contextRecordID: params.contextRecordID,
