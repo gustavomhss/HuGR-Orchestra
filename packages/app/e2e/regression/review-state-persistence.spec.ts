@@ -44,6 +44,20 @@ test("restores review mode and selected file per session", async ({ page }) => {
   await expectSelectedFile(page, "gamma.ts")
 })
 
+test("keeps Apps usable when the project lookup is empty", async ({ page }) => {
+  await setup(page)
+  await page.route(/\/(?:api\/)?project(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  )
+  await page.addInitScript(() => {
+    localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ review: { panelOpened: true } }))
+  })
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.getByRole("tab", { name: "Apps", exact: true }).click()
+  await expect(page.getByRole("tabpanel", { name: "Apps", exact: true })).toBeVisible()
+})
+
 async function selectMode(page: Page, current: string, next: string) {
   await page.getByRole("button", { name: current }).click()
   await page.getByRole("option", { name: next }).dispatchEvent("click")

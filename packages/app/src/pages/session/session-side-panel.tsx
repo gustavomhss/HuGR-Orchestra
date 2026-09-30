@@ -42,6 +42,8 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
+import { useServerSync } from "@/context/server-sync"
 import { useSettings } from "@/context/settings"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -92,6 +94,8 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const sdk = useSDK()
+  const sync = useSync()
+  const serverSync = useServerSync()
   const { sessionKey, tabs, view, params } = useSessionLayout()
   const projectDirectory = createMemo(() => sdk().directory)
 
@@ -254,10 +258,9 @@ export function SessionSidePanel(props: {
     openReviewPanel()
     tabs().setActive(next)
   }
-  // Mount the collection only after its saved state and Review trigger are ready.
-  // Otherwise Kobalte persists Apps as a fallback over the restored Review tab.
+  // Wait for bootstrap so Kobalte cannot replace the restored Review tab with Apps.
   const PanelTabs = (input: ComponentProps<typeof Tabs>) => (
-    <Show when={layout.ready() && props.canReview()}>
+    <Show when={layout.ready() && serverSync().ready && (props.canReview() || sync().status === "complete")}>
       <Tabs {...input} />
     </Show>
   )
