@@ -97,6 +97,17 @@ describe("cross-spawn spawner", () => {
         expect(code).toBe(ChildProcessSpawner.ExitCode(42))
       }),
     )
+
+    fx.live(
+      "retains pipe output when collected after process exit",
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        const handle = yield* spawner.spawn(js('process.stdout.write("out"); process.stderr.write("err")'))
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(yield* decodeByteStream(handle.stdout)).toBe("out")
+        expect(yield* decodeByteStream(handle.stderr)).toBe("err")
+      }),
+    )
   })
 
   describe("cwd option", () => {

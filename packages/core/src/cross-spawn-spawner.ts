@@ -95,6 +95,7 @@ const toPlatformError = (
 }
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
+type ProcessOutput = Pick<NodeChildProcess.ChildProcess, "stdout" | "stderr">
 
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
@@ -241,7 +242,7 @@ export const make = Effect.gen(function* () {
 
   const setupOutput = (
     command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
+    proc: ProcessOutput,
     out: ChildProcess.StdoutConfig,
     err: ChildProcess.StderrConfig,
   ) => {
@@ -265,9 +266,20 @@ export const make = Effect.gen(function* () {
   }
 
   const spawn = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
-    Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
+    Effect.callback<
+      readonly [NodeChildProcess.ChildProcess, ExitSignal, ProcessOutput],
+      PlatformError.PlatformError
+    >((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
+      // Node drains unread child pipes at exit. Attach consumers before the
+      // Effect scheduler resumes so short-lived commands cannot lose output.
+      const output = {
+        stdout: proc.stdout?.pipe(new PassThrough()) ?? null,
+        stderr: proc.stderr?.pipe(new PassThrough()) ?? null,
+      }
+      proc.stdout?.on("error", (error) => output.stdout?.destroy(toError(error)))
+      proc.stderr?.on("error", (error) => output.stderr?.destroy(toError(error)))
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
@@ -282,7 +294,7 @@ export const make = Effect.gen(function* () {
         Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
       })
       proc.on("spawn", () => {
-        resume(Effect.succeed([proc, signal]))
+        resume(Effect.succeed([proc, signal, output]))
       })
       return Effect.sync(() => {
         proc.kill("SIGTERM")
@@ -370,7 +382,7 @@ export const make = Effect.gen(function* () {
           const extra = fds(command.options)
           const dir = yield* cwd(command.options)
 
-          const [proc, signal] = yield* Effect.acquireRelease(
+          const [proc, signal, output] = yield* Effect.acquireRelease(
             spawn(command, {
               cwd: dir,
               env: env(command.options),
@@ -403,7 +415,7 @@ export const make = Effect.gen(function* () {
           )
 
           const fd = yield* setupFds(command, proc, extra)
-          const out = setupOutput(command, proc, sout, serr)
+          const out = setupOutput(command, output, sout, serr)
           let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
