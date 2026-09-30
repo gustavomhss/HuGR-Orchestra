@@ -215,7 +215,13 @@ export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
 
 function locale(value: string) {
   try {
-    return new Intl.Locale(value).maximize()
+    const resolved = new Intl.Locale(value).maximize()
+    return {
+      language: resolved.language,
+      // ICU versions infer either Arabic or its Nastaliq variant for pa-PK.
+      // Both use our Shahmukhi bundle; Gurmukhi Punjabi must still fall back.
+      script: resolved.language === "pa" && resolved.script === "Aran" ? "Arab" : resolved.script,
+    }
   } catch {
     return undefined
   }
