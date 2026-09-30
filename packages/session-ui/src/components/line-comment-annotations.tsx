@@ -447,6 +447,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     },
     onOpenDraft: note.openDraft,
     onFocus: note.select,
+    getFocusSelectedRange: note.selected,
   })
 
   const onLineSelected = (range: SelectedLineRange | null) => {
@@ -616,13 +617,14 @@ export function createLineCommentGutterRenderer(props: {
   getSelectedRange: Accessor<SelectedLineRange | null>
   onOpenDraft: (range: SelectedLineRange) => void
   onFocus?: (range: SelectedLineRange) => void
+  getFocusSelectedRange?: Accessor<SelectedLineRange | null>
 }) {
   return (getHoveredLine: () => HoverCommentLine | undefined) =>
     createHoverCommentUtility({
       label: props.label,
       getHoveredLine,
       onFocus: (hovered) => {
-        const current = props.getSelectedRange()
+        const current = props.getFocusSelectedRange?.() ?? props.getSelectedRange()
         if (current && lineInSelectedRange(current, hovered.lineNumber, hovered.side)) return
         // Selection keeps Pierre's gutter attached across hover invalidation and highlighting.
         props.onFocus?.({

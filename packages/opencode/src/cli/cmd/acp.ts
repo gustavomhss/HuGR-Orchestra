@@ -5,6 +5,8 @@ import { ServerAuth } from "@/server/auth"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
+import { ACPInitialize } from "@/acp/initialize"
+import type { Agent } from "@/acp/agent"
 
 export const AcpCommand = cmd({
   command: "acp",
@@ -57,6 +59,26 @@ export const AcpCommand = cmd({
           },
         })
 
+        const ready = yield* Deferred.make<Agent>()
+        const withAgent = <A>(fn: (agent: Agent) => Promise<A>) => Effect.runPromise(Deferred.await(ready)).then(fn)
+        const connection = new AgentSideConnection(
+          () => ({
+            initialize: async (params) => ACPInitialize.response(params),
+            authenticate: (params) => withAgent((agent) => agent.authenticate(params)),
+            newSession: (params) => withAgent((agent) => agent.newSession(params)),
+            loadSession: (params) => withAgent((agent) => agent.loadSession(params)),
+            listSessions: (params) => withAgent((agent) => agent.listSessions(params)),
+            resumeSession: (params) => withAgent((agent) => agent.resumeSession(params)),
+            closeSession: (params) => withAgent((agent) => agent.closeSession(params)),
+            unstable_forkSession: (params) => withAgent((agent) => agent.unstable_forkSession(params)),
+            setSessionConfigOption: (params) => withAgent((agent) => agent.setSessionConfigOption(params)),
+            setSessionMode: (params) => withAgent((agent) => agent.setSessionMode(params)),
+            unstable_setSessionModel: (params) => withAgent((agent) => agent.unstable_setSessionModel(params)),
+            prompt: (params) => withAgent((agent) => agent.prompt(params)),
+            cancel: (params) => withAgent((agent) => agent.cancel(params)),
+          }),
+          ndJsonStream(input, output),
+        )
         process.stdin.resume()
         // EOF must also stop startup before heavy imports and server setup complete.
         yield* Effect.raceFirst(
@@ -84,13 +106,8 @@ export const AcpCommand = cmd({
               headers: ServerAuth.headers(),
             })
             const agent = modules.agent.ACP.init({ sdk })
-            new AgentSideConnection(
-              (conn) => {
-                ACPProfile.mark("cli.acp.connection.create")
-                return agent.create(conn)
-              },
-              ndJsonStream(input, output),
-            )
+            ACPProfile.mark("cli.acp.connection.create")
+            yield* Deferred.succeed(ready, agent.create(connection))
             yield* Effect.promise((signal) =>
               modules.runtime.AppRuntime.runPromise(Effect.logInfo("setup connection"), { signal }),
             )

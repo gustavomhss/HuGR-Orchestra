@@ -2,7 +2,6 @@ import {
   type AgentSideConnection,
   type AuthenticateRequest,
   type AuthenticateResponse,
-  type AuthMethod,
   type CancelNotification,
   type CloseSessionRequest,
   type CloseSessionResponse,
@@ -29,7 +28,6 @@ import {
   type SetSessionModeRequest,
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
@@ -41,12 +39,13 @@ import { ACPEvent } from "./event"
 import { ACPSession } from "./session"
 import { UsageService } from "./usage"
 import { ACPProfile } from "./profile"
+import { ACPInitialize } from "./initialize"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
-export const AuthMethodID = "opencode-login"
+export { AuthMethodID } from "./initialize"
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
@@ -93,53 +92,13 @@ export function make(input: {
 
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
-    const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
-      name: "Login with opencode",
-      id: AuthMethodID,
-    }
-
-    if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
-      authMethod._meta = {
-        "terminal-auth": {
-          command: "opencode",
-          args: ["auth", "login"],
-          label: "OpenCode Login",
-        },
-      }
-    }
-
-    const response = {
-      protocolVersion: 1,
-      agentCapabilities: {
-        loadSession: true,
-        mcpCapabilities: {
-          http: true,
-          sse: true,
-        },
-        promptCapabilities: {
-          embeddedContext: true,
-          image: true,
-        },
-        sessionCapabilities: {
-          close: {},
-          fork: {},
-          list: {},
-          resume: {},
-        },
-      },
-      authMethods: [authMethod],
-      agentInfo: {
-        name: "OpenCode",
-        version: InstallationVersion,
-      },
-    }
+    const response = ACPInitialize.response(params)
     ACPProfile.duration("acp.initialize", started)
     return response
   })
 
   const authenticate = Effect.fn("ACP.authenticate")(function* (params: AuthenticateRequest) {
-    if (params.methodId !== AuthMethodID) {
+    if (params.methodId !== ACPInitialize.AuthMethodID) {
       return yield* new ACPError.UnknownAuthMethodError({ methodId: params.methodId })
     }
     return {}
