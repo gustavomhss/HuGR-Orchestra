@@ -5,7 +5,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { createHash } from "node:crypto"
-import { realpath } from "node:fs/promises"
+import { stat } from "node:fs/promises"
 import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { eq } from "drizzle-orm"
@@ -19,14 +19,15 @@ import { lookupRosterMember, nativeProfiles, roster, type RosterMember } from ".
 import { readContext } from "./context-record"
 
 type Check = { id: string; status: "PASS" | "FAIL" | "HOLD"; detail: string }
-type ValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.Recorded.data>
+type LegacyValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.Recorded.data>
+type ValidationData = Schema.Schema.Type<typeof MaestroEvent.Validation.RecordedV2.data>
 type ReviewData = Schema.Schema.Type<typeof MaestroEvent.Review.Received.data>
 
 export type RecordValidationInput = {
   sessionID: string
-  planRevisionID?: string
-  contextRecordID?: string
-  contextHash?: string
+  planRevisionID: string
+  contextRecordID: string
+  contextHash: string
   projectID: string
   workCardID: string
   workCard: string
@@ -36,7 +37,7 @@ export type RecordValidationInput = {
   checks: unknown
 }
 
-export type ValidationRecord = ValidationData & { id: string }
+export type ValidationRecord = (LegacyValidationData | ValidationData) & { id: string }
 
 export type RecordReviewInput = {
   sessionID: string
@@ -80,7 +81,7 @@ function hash(value: unknown) {
   return createHash("sha256").update(stable(value)).digest("hex")
 }
 
-export function validationRecordHash(record: ValidationData) {
+export function validationRecordHash(record: LegacyValidationData) {
   return hash(record)
 }
 
@@ -138,9 +139,9 @@ function validation(input: RecordValidationInput): Omit<ValidationData, "actor">
   if (!reviewer?.nativeProfile) throw new ValidationRejectedError({ reason: "reviewer-policy-missing" })
   return {
     sessionID,
-    ...(input.planRevisionID ? { planRevisionID: input.planRevisionID } : {}),
-    ...(input.contextRecordID ? { contextRecordID: input.contextRecordID } : {}),
-    ...(input.contextHash ? { contextHash: input.contextHash } : {}),
+    planRevisionID: requireText(input.planRevisionID, "malformed-plan-revision-id"),
+    contextRecordID: requireText(input.contextRecordID, "malformed-context-record-id"),
+    contextHash: requireText(input.contextHash, "malformed-context-hash"),
     projectID,
     workCardID,
     workCard,
@@ -161,17 +162,30 @@ function actor(session: Session.Info, memberId: "maestro" | "lucy") {
   return { version: "rfc8785-v1" as const, bytes, sha256: createHash("sha256").update(bytes, "utf8").digest("hex") }
 }
 
-const canonicalPath = Effect.fn("MaestroValidation.canonicalPath")(function* (value: string) {
-  const resolved = yield* Effect.tryPromise({
-    try: () => realpath(value),
-    catch: () => path.resolve(value),
-  }).pipe(Effect.catch((fallback) => Effect.succeed(fallback)))
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved
+const pathIdentity = Effect.fn("MaestroValidation.pathIdentity")(function* (value: string) {
+  return yield* Effect.tryPromise({
+    try: () => stat(value, { bigint: true }).then((info) => (info.ino === 0n ? undefined : `${info.dev}:${info.ino}`)),
+    catch: () => undefined,
+  }).pipe(Effect.catch(() => Effect.succeed(undefined)))
 })
 
-function containsPath(root: string, target: string) {
-  const relative = path.relative(root, target)
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+const samePath = Effect.fn("MaestroValidation.samePath")(function* (left: string, right: string) {
+  const leftIdentity = yield* pathIdentity(left)
+  return leftIdentity !== undefined && leftIdentity === (yield* pathIdentity(right))
+})
+
+const containsPath = Effect.fn("MaestroValidation.containsPath")(function* (root: string, target: string) {
+  const rootIdentity = yield* pathIdentity(root)
+  if (!rootIdentity) return false
+  const identities = yield* Effect.forEach(pathAncestors(target), pathIdentity)
+  return identities.includes(rootIdentity)
+})
+
+function pathAncestors(value: string): string[] {
+  const resolved = path.resolve(value)
+  const parent = path.dirname(resolved)
+  if (parent === resolved) return [resolved]
+  return [resolved, ...pathAncestors(parent)]
 }
 
 const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (sessionID: string, projectID: string) {
@@ -193,9 +207,10 @@ const resolveSession = Effect.fn("MaestroValidation.resolveSession")(function* (
     .get()
     .pipe(Effect.orDie)
   if (!project) return yield* new ValidationRejectedError({ reason: "session-project-absent" })
-  const directory = yield* canonicalPath(session.directory)
-  const roots = yield* Effect.forEach([project.worktree, ...project.sandboxes], canonicalPath)
-  if (!roots.some((root) => containsPath(root, directory))) {
+  const matches = yield* Effect.forEach([project.worktree, ...project.sandboxes], (root) =>
+    containsPath(root, session.directory),
+  )
+  if (!matches.some(Boolean)) {
     return yield* new ValidationRejectedError({ reason: "session-location-mismatch" })
   }
   return { session, project }
@@ -236,8 +251,14 @@ export const readValidation = Effect.fn("MaestroValidation.read")(function* (id:
     .where(eq(EventTable.id, EventV2.ID.make(id)))
     .get()
     .pipe(Effect.orDie)
-  if (!row || row.type !== EventV2.versionedType(MaestroEvent.Validation.Recorded.type, 1)) return undefined
-  return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Validation.Recorded.data)(row.data) }
+  if (!row) return undefined
+  if (row.type === EventV2.versionedType(MaestroEvent.Validation.RecordedV2.type, 2)) {
+    return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Validation.RecordedV2.data)(row.data) }
+  }
+  if (row.type === EventV2.versionedType(MaestroEvent.Validation.Recorded.type, 1)) {
+    return { id: row.id, ...Schema.decodeUnknownSync(MaestroEvent.Validation.Recorded.data)(row.data) }
+  }
+  return undefined
 })
 
 export const recordValidation = Effect.fn("MaestroValidation.record")(function* (input: RecordValidationInput) {
@@ -261,7 +282,7 @@ export const recordValidation = Effect.fn("MaestroValidation.record")(function* 
     return yield* new ValidationConflictError({ sessionID: input.sessionID, workCardID: input.workCardID })
   }
   const events = yield* EventV2Bridge.Service
-  return yield* events.publish(MaestroEvent.Validation.Recorded, wanted, { id }).pipe(
+  return yield* events.publish(MaestroEvent.Validation.RecordedV2, wanted, { id }).pipe(
     Effect.map((recorded) => ({ id: recorded.id, ...recorded.data })),
     Effect.catchCause((cause) =>
       Effect.gen(function* () {
@@ -431,12 +452,10 @@ const requireArtifact = Effect.fn("MaestroReview.requireArtifact")(function* (
   const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: directory })
   const worktree = root.text().trim()
   if (root.exitCode !== 0 || !worktree) return yield* new ReviewRejectedError({ reason: "git-root-unavailable" })
-  const canonicalWorktree = yield* canonicalPath(worktree)
-  const canonicalDirectory = yield* canonicalPath(directory)
   if (
-    (yield* canonicalPath(artifact.worktree)) !== canonicalWorktree ||
-    (yield* canonicalPath(projectWorktree)) !== canonicalWorktree ||
-    !containsPath(canonicalWorktree, canonicalDirectory)
+    !(yield* samePath(artifact.worktree, worktree)) ||
+    !(yield* samePath(projectWorktree, worktree)) ||
+    !(yield* containsPath(worktree, directory))
   ) {
     return yield* new ReviewRejectedError({ reason: "artifact-worktree-mismatch" })
   }

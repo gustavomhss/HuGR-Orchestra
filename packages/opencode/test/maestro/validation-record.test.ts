@@ -1,17 +1,25 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { EventV2 } from "@opencode-ai/core/event"
 import { EventTable } from "@opencode-ai/core/event/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
+import { MaestroEvent } from "@opencode-ai/schema/maestro-event"
 import { Effect } from "effect"
 import { eq } from "drizzle-orm"
 import path from "node:path"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Git } from "@/git"
 import { SessionID } from "@/session/schema"
-import { readReview, recordReview, recordValidation, reviewPolicyHash } from "../../src/maestro/validation-record"
+import {
+  readReview,
+  readValidation,
+  recordReview,
+  recordValidation,
+  reviewPolicyHash,
+} from "../../src/maestro/validation-record"
 import { nativeProfiles, roster } from "../../src/maestro/roster"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -24,6 +32,9 @@ const it = testEffect(LayerNode.compile(LayerNode.group([Database.node, EventV2B
 
 const base = {
   sessionID: "ses_validation",
+  planRevisionID: "evt_plan_validation",
+  contextRecordID: "evt_context_validation",
+  contextHash: "c".repeat(64),
   workCardID: "card_validation",
   workCard: "# Card\nImplement exact behavior.\n",
   routedMemberID: "charlie",
@@ -62,15 +73,27 @@ const prepare = Effect.fn("MaestroValidationTest.prepare")(function* (sessionID 
 
 const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
   const test = yield* TestInstance
+  const { db } = yield* Database.Service
+  const events = yield* EventV2Bridge.Service
   const git = yield* Git.Service
-  const base = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
+  const baseCommit = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
   const root = yield* git.run(["rev-parse", "--show-toplevel"], { cwd: test.directory })
   yield* Effect.promise(() => Bun.write(`${test.directory}/proof.txt`, "proof\n"))
   yield* git.run(["add", "proof.txt"], { cwd: test.directory })
   yield* git.run(["commit", "-m", "proof"], { cwd: test.directory })
   const head = yield* git.run(["rev-parse", "HEAD"], { cwd: test.directory })
   const names = yield* git.run(
-    ["diff", "--no-ext-diff", "--no-renames", "--name-only", "-z", base.text().trim(), head.text().trim(), "--", "."],
+    [
+      "diff",
+      "--no-ext-diff",
+      "--no-renames",
+      "--name-only",
+      "-z",
+      baseCommit.text().trim(),
+      head.text().trim(),
+      "--",
+      ".",
+    ],
     {
       cwd: test.directory,
     },
@@ -84,15 +107,41 @@ const artifact = Effect.fn("MaestroValidationTest.artifact")(function* () {
       "--no-renames",
       "--src-prefix=a/",
       "--dst-prefix=b/",
-      base.text().trim(),
+      baseCommit.text().trim(),
       head.text().trim(),
       "--",
       ".",
     ],
     { cwd: test.directory },
   )
+  const project = yield* db
+    .select()
+    .from(ProjectTable)
+    .where(eq(ProjectTable.worktree, AbsolutePath.make(test.directory)))
+    .get()
+    .pipe(Effect.orDie)
+  if (!project) throw new Error("missing test project")
+  yield* events.publish(
+    MaestroEvent.Context.Recorded,
+    {
+      id: base.contextRecordID,
+      sessionID: base.sessionID,
+      planRevisionID: base.planRevisionID,
+      projectID: project.id,
+      directory: test.directory,
+      mode: "UNGROUNDED",
+      branch: "test",
+      headSHA: head.text().trim(),
+      changedPaths: [],
+      currentEvidenceIdentityHash: "b".repeat(64),
+      contextHash: base.contextHash,
+      status: "CURRENT",
+      createdAt: 1,
+    },
+    { id: EventV2.ID.make(base.contextRecordID) },
+  )
   return {
-    baseSHA: base.text().trim(),
+    baseSHA: baseCommit.text().trim(),
     headSHA: head.text().trim(),
     worktree: root.text().trim(),
     changedPaths: names.text().split("\0").filter(Boolean),
@@ -114,8 +163,12 @@ describe("Maestro validation receipt", () => {
       Effect.gen(function* () {
         const input = yield* prepare()
         const receipt = yield* recordValidation(input)
+        const { db } = yield* Database.Service
+        const row = yield* db.select().from(EventTable).where(eq(EventTable.id, receipt.id)).get().pipe(Effect.orDie)
 
         expect(receipt.projectID).toBe(input.projectID)
+        expect(row?.type).toBe(EventV2.versionedType(MaestroEvent.Validation.RecordedV2.type, 2))
+        expect(yield* readValidation(receipt.id)).toEqual(receipt)
         expect(receipt.actor).toEqual({
           version: "rfc8785-v1",
           bytes: `{"memberId":"maestro","projectId":"${input.projectID}","sessionId":"${input.sessionID}"}`,
@@ -256,7 +309,7 @@ describe("Maestro validation receipt", () => {
           reviewMethodVersion: "review-v1",
           verdict: "APPROVE",
           findings: [],
-          artifact: { ...evidence, worktree: path.resolve(evidence.worktree, "..", "forged") },
+          artifact: { ...evidence, worktree: path.dirname(evidence.worktree) },
           checks: input.checks,
         }).pipe(Effect.flip)
 
@@ -332,7 +385,7 @@ describe("Maestro validation receipt", () => {
         const { db } = yield* Database.Service
 
         expectReviewRejection(rejected, "artifact-parentage-mismatch")
-        expect(yield* db.select().from(EventTable).all().pipe(Effect.orDie)).toHaveLength(1)
+        expect(yield* db.select().from(EventTable).all().pipe(Effect.orDie)).toHaveLength(2)
       }),
     { git: true },
   )

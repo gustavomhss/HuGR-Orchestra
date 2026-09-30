@@ -1426,9 +1426,9 @@ export type GlobalEvent = {
         type: "maestro.validation.recorded"
         properties: {
           sessionID: string
-          planRevisionID?: string
-          contextRecordID?: string
-          contextHash?: string
+          planRevisionID: string
+          contextRecordID: string
+          contextHash: string
           projectID: string
           workCardID: string
           workCard: string
@@ -4484,15 +4484,15 @@ export type SyncEventMaestroValidationRecorded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "maestro.validation.recorded.1"
+    type: "maestro.validation.recorded.2"
     id: string
     seq: number
     aggregateID: string
     data: {
       sessionID: string
-      planRevisionID?: string
-      contextRecordID?: string
-      contextHash?: string
+      planRevisionID: string
+      contextRecordID: string
+      contextHash: string
       projectID: string
       workCardID: string
       workCard: string
@@ -6423,9 +6423,9 @@ export type MaestroValidationRecorded = {
   location?: LocationRef
   data: {
     sessionID: string
-    planRevisionID?: string
-    contextRecordID?: string
-    contextHash?: string
+    planRevisionID: string
+    contextRecordID: string
+    contextHash: string
     projectID: string
     workCardID: string
     workCard: string
@@ -8140,9 +8140,9 @@ export type EventMaestroValidationRecorded = {
   type: "maestro.validation.recorded"
   properties: {
     sessionID: string
-    planRevisionID?: string
-    contextRecordID?: string
-    contextHash?: string
+    planRevisionID: string
+    contextRecordID: string
+    contextHash: string
     projectID: string
     workCardID: string
     workCard: string

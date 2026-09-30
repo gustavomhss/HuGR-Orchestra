@@ -50,20 +50,66 @@ async function write() {
   const { ProjectTable } = await import("@opencode-ai/core/project/sql")
   const { ProjectSchema } = await import("@opencode-ai/core/project/schema")
   const { SessionTable } = await import("@opencode-ai/core/session/sql")
+  const { EventV2 } = await import("@opencode-ai/core/event")
+  const { MaestroEvent } = await import("@opencode-ai/schema/maestro-event")
   const { SessionID } = await import("../src/session/schema")
   const { EventV2Bridge } = await import("../src/event-v2-bridge")
   const { Git } = await import("../src/git")
   const { recordReview, recordValidation } = await import("../src/maestro/validation-record")
   const artifact = JSON.parse(await Bun.file(artifactPath!).text())
   const layer = LayerNode.compile(LayerNode.group([Database.node, EventV2Bridge.node, Git.node]))
-  const result = await Effect.runPromise(Effect.gen(function* () {
-    const { db } = yield* Database.Service
-    yield* db.insert(ProjectTable).values({ id: ProjectSchema.ID.make(projectID), worktree: artifact.worktree, sandboxes: [], time_created: 1 }).run().pipe(Effect.orDie)
-    yield* db.insert(SessionTable).values({ id: SessionID.make(sessionID), project_id: ProjectSchema.ID.make(projectID), slug: sessionID, directory: artifact.worktree, title: "restart", version: "test", time_created: 1 }).run().pipe(Effect.orDie)
-    const validation = yield* recordValidation({ sessionID, projectID, workCardID: "card_wave1_restart", workCard: "# restart card\n", routedMemberID: "charlie", validatorID: "maestro", validatorVersion: "validate-v1", checks: [{ id: "route", status: "PASS", detail: "routed" }] })
-    const review = yield* recordReview({ sessionID, validationRecordID: validation.id, workCard: "# restart card\n", reviewerID: "lucy", reviewMethodVersion: "review-v1", verdict: "APPROVE", findings: [], artifact, checks: [{ id: "route", status: "PASS", detail: "routed" }] })
-    return { validation, review }
-  }).pipe(Effect.provide(layer)))
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const events = yield* EventV2Bridge.Service
+      yield* db.insert(ProjectTable).values({ id: ProjectSchema.ID.make(projectID), worktree: artifact.worktree, sandboxes: [], time_created: 1 }).run().pipe(Effect.orDie)
+      yield* db.insert(SessionTable).values({ id: SessionID.make(sessionID), project_id: ProjectSchema.ID.make(projectID), slug: sessionID, directory: artifact.worktree, title: "restart", version: "test", time_created: 1 }).run().pipe(Effect.orDie)
+      yield* events.publish(
+        MaestroEvent.Context.Recorded,
+        {
+          id: "evt_context_wave1_restart",
+          sessionID,
+          planRevisionID: "evt_plan_wave1_restart",
+          projectID,
+          directory: artifact.worktree,
+          mode: "UNGROUNDED",
+          branch: "test",
+          headSHA: artifact.headSHA,
+          changedPaths: artifact.changedPaths,
+          currentEvidenceIdentityHash: "b".repeat(64),
+          contextHash: "c".repeat(64),
+          status: "CURRENT",
+          createdAt: 1,
+        },
+        { id: EventV2.ID.make("evt_context_wave1_restart") },
+      )
+      const validation = yield* recordValidation({
+        sessionID,
+        planRevisionID: "evt_plan_wave1_restart",
+        contextRecordID: "evt_context_wave1_restart",
+        contextHash: "c".repeat(64),
+        projectID,
+        workCardID: "card_wave1_restart",
+        workCard: "# restart card\n",
+        routedMemberID: "charlie",
+        validatorID: "maestro",
+        validatorVersion: "validate-v1",
+        checks: [{ id: "route", status: "PASS", detail: "routed" }],
+      })
+      const review = yield* recordReview({
+        sessionID,
+        validationRecordID: validation.id,
+        workCard: "# restart card\n",
+        reviewerID: "lucy",
+        reviewMethodVersion: "review-v1",
+        verdict: "APPROVE",
+        findings: [],
+        artifact,
+        checks: [{ id: "route", status: "PASS", detail: "routed" }],
+      })
+      return { validation, review }
+    }).pipe(Effect.provide(layer)),
+  )
   await Bun.write(receipt!, JSON.stringify(result))
   console.log("MAESTRO_WAVE1_RESTART_WRITE_OK")
 }

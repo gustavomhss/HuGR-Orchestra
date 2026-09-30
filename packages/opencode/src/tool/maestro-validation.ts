@@ -96,10 +96,17 @@ export const MaestroRecordValidationTool = Tool.define(
           if (!sessionRow) return yield* Effect.fail(new Error("Validation session not found"))
           const session = Session.fromRow(sessionRow)
           const record = yield* recordValidation({
-            ...params,
+            planRevisionID: params.planRevisionID,
+            contextRecordID: params.contextRecordID,
+            contextHash: params.contextHash,
             projectID: session.projectID,
             sessionID: ctx.sessionID,
+            workCardID: params.workCardID,
+            workCard: params.workCard,
+            routedMemberID: params.routedMemberID,
             validatorID: "maestro",
+            validatorVersion: params.validatorVersion,
+            checks: params.checks,
           })
           return {
             title: `Validation ${record.outcome}`,
