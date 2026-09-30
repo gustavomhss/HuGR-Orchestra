@@ -36,6 +36,8 @@ test("restores review mode and selected file per session", async ({ page }) => {
 
   await page.reload()
   await expectSessionTitle(page, titleA)
+  await page.locator("#session-side-panel-review-tab").click()
+  await expect(page.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
   await expect(page.getByRole("button", { name: "Branch changes" })).toBeVisible()
   await expectSelectedFile(page, "beta.ts")
 
