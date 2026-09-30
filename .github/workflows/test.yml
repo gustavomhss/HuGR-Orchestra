@@ -28,9 +28,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -41,13 +41,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "24"
-
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Install ripgrep
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Install ripgrep on Windows
+        if: runner.os == 'Windows'
+        run: choco install ripgrep --no-progress --yes
 
       - name: Configure git identity
         run: |
@@ -65,7 +68,7 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: GITHUB_ACTIONS=false bun turbo test
+        run: GITHUB_ACTIONS=false bun turbo test --continue=always
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
@@ -86,9 +89,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ubuntu-latest
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
@@ -101,14 +104,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
         with:
           # Playwright 1.59 hangs while extracting Chromium with Node 24.16.
           node-version: "24.15"
-
-      - name: Setup Bun
-        uses: ./.github/actions/setup-bun
 
       - name: Read Playwright version
         id: playwright-version
