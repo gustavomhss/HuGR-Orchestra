@@ -147,20 +147,20 @@ describe("pty HttpApi bridge", () => {
     expect(created.status).toBe(200)
     const info = await created.json()
 
-    // Exited sessions are retained by core for the canonical surface, but the legacy
-    // routes preserve pre-retention behavior: exited sessions are invisible here.
-    const deadline = Date.now() + 5_000
+    // Observe process exit through the running-only list before checking lookup.
+    // A still-running process must not be mistaken for a broken legacy lookup filter.
+    const deadline = Date.now() + 15_000
     while (Date.now() < deadline) {
-      const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
-      if (found.status === 404) break
+      const list = await app().request(PtyPaths.list, { headers })
+      if ((await list.json()).length === 0) break
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
-    expect(found.status).toBe(404)
-
     const list = await app().request(PtyPaths.list, { headers })
     expect(list.status).toBe(200)
     expect(await list.json()).toEqual([])
+    const found = await app().request(PtyPaths.get.replace(":ptyID", info.id), { headers })
+    expect(found.status).toBe(404)
+    expect(await found.json()).toMatchObject({ _tag: "PtyNotFoundError", ptyID: info.id })
   })
 
   testPty("disposes PTY sessions with their legacy instance", async () => {

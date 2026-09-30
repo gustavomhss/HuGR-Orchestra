@@ -270,8 +270,12 @@ const cli = yargs(args)
 
 try {
   if (args.includes("-h") || args.includes("--help")) {
-    const helpText = await cli.getHelp()
-    show(helpText)
+    // yargs does not await an asynchronous default builder when rendering help.
+    const { TuiThreadCommand } = await import("./cli/cmd/tui")
+    await cli.command(TuiThreadCommand).parseAsync(args, {}, (error, _argv, output) => {
+      if (error) throw error
+      show(output)
+    })
   } else {
     await cli.parse()
   }
