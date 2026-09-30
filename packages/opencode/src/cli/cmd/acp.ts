@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ServerAuth } from "@/server/auth"
@@ -42,13 +42,25 @@ export const AcpCommand = effectCmd({
         })
       },
     })
+    const ended = yield* Deferred.make<void>()
     const output = new ReadableStream<Uint8Array>({
       start(controller) {
+        if (process.stdin.readableEnded) {
+          controller.close()
+          Deferred.doneUnsafe(ended, Effect.void)
+          return
+        }
         process.stdin.on("data", (chunk: Buffer) => {
           controller.enqueue(new Uint8Array(chunk))
         })
-        process.stdin.on("end", () => controller.close())
-        process.stdin.on("error", (err) => controller.error(err))
+        process.stdin.on("end", () => {
+          controller.close()
+          Deferred.doneUnsafe(ended, Effect.void)
+        })
+        process.stdin.on("error", (err) => {
+          controller.error(err)
+          Deferred.doneUnsafe(ended, Effect.die(err))
+        })
       },
     })
 
@@ -62,12 +74,7 @@ export const AcpCommand = effectCmd({
 
     yield* Effect.logInfo("setup connection")
     process.stdin.resume()
-    yield* Effect.promise(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          process.stdin.on("end", () => resolve())
-          process.stdin.on("error", reject)
-        }),
-    )
+    // EOF can arrive as soon as the stream starts, before this await is reached.
+    yield* Deferred.await(ended)
   }),
 })
