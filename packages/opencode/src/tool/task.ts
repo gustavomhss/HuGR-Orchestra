@@ -471,6 +471,19 @@ export const TaskTool = Tool.define(
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
+        // Session-start hooks run after reservation and can change the repository.
+        if (params.authorizationID) {
+          yield* reserveDispatch({
+            sessionID: ctx.sessionID,
+            authorizationID: params.authorizationID,
+            permission: childPermissions,
+            requireCurrent: true,
+          }).pipe(
+            Effect.provideService(Database.Service, database),
+            Effect.provideService(EventV2Bridge.Service, events),
+            Effect.provideService(Git.Service, git),
+          )
+        }
         const parts = yield* ops.resolvePromptParts(params.prompt)
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),

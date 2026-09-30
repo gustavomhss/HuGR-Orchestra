@@ -97,6 +97,8 @@ export const MaestroRequestReviewTool = Tool.define(
           const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
           if (!ops) return yield* Effect.fail(new Error("Review delegation requires promptOps"))
           const child = yield* sessions.create({ parentID: ctx.sessionID, agent: "lucy" })
+          if (!(yield* contextIsCurrent(context)))
+            return yield* Effect.fail(new Error("Review delegation context changed during child creation"))
           const model = ctx.extra?.model as { providerID?: string; api?: { id?: string } } | undefined
           const result = yield* Effect.exit(
             ops.prompt({

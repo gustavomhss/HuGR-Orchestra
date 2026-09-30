@@ -298,6 +298,38 @@ describe("Maestro evidence tools", () => {
         expect(Exit.isFailure(dirtyReview)).toBe(true)
         if (Exit.isFailure(dirtyReview))
           expect(Cause.pretty(dirtyReview.cause)).toContain("Review delegation context is stale or dirty")
+        yield* Effect.promise(() => Bun.write(`${test.directory}/first.txt`, "first\n"))
+        const hookTool = yield* MaestroRequestReviewTool.pipe(
+          Effect.provideService(Session.Service, {
+            ...sessions,
+            create: (input) =>
+              sessions.create(input).pipe(
+                Effect.tap(() =>
+                  Effect.gen(function* () {
+                    yield* Effect.promise(() => Bun.write(`${test.directory}/first.txt`, "child hook change\n"))
+                    yield* git.run(["add", "first.txt"], { cwd: test.directory })
+                    expect((yield* git.run(["commit", "-m", "child hook"], { cwd: test.directory })).exitCode).toBe(0)
+                  }),
+                ),
+              ),
+          }),
+        )
+        let delegations = 0
+        const changedDuringCreation = yield* hookTool.init().pipe(
+          Effect.flatMap((def) =>
+            def.execute(
+              { validationRecordID, workCard, reviewMethodVersion: "review-v1" },
+              { ...caller, sessionID: chat.id, extra: { promptOps: promptOps(() => delegations++) } },
+            ),
+          ),
+          Effect.exit,
+        )
+        expect(Exit.isFailure(changedDuringCreation)).toBe(true)
+        if (Exit.isFailure(changedDuringCreation))
+          expect(Cause.pretty(changedDuringCreation.cause)).toContain(
+            "Review delegation context changed during child creation",
+          )
+        expect(delegations).toBe(0)
       }),
     { git: true },
     30_000,
