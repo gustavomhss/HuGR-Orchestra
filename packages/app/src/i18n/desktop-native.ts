@@ -202,11 +202,21 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     if (["no", "nb", "nn"].includes(source.language)) return "no"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
-      return target?.language === source.language && target.script === source.script
+      return target?.language === source.language && script(target.script) === script(source.script)
     })
     if (match) return match
   }
   return "en"
+}
+
+// CLDR revisions disagree on the ISO 15924 code for Shahmukhi: some ICU versions
+// canonicalize "Aran" to "Arab". Normalize so script matching does not depend on
+// which CLDR the runtime shipped with.
+const SCRIPT_ALIASES: Record<string, string> = { Arab: "Aran" }
+
+function script(value: string | undefined) {
+  if (!value) return value
+  return SCRIPT_ALIASES[value] ?? value
 }
 
 export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
