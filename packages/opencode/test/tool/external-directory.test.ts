@@ -116,10 +116,9 @@ describe("tool.assertExternalDirectory", () => {
           yield* Effect.promise(() => Bun.write(path.join(outerTmp, "outside.txt"), "x"))
 
           const target = path.join(outerTmp, "outside.txt")
-          const alt = target
-            .replace(/^[A-Za-z]:/, "")
-            .replaceAll("\\", "/")
-            .toLowerCase()
+          // Keep the drive: CI's temporary directory and checkout can be on
+          // different volumes, so removing it changes the path's identity.
+          const alt = target.replaceAll("\\", "/").toLowerCase()
 
           yield* assertExternalDirectoryEffect(ctx, alt)
 
