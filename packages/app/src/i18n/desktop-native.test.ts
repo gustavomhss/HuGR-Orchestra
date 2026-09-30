@@ -133,6 +133,14 @@ describe("desktop native locale detection", () => {
     expect(detectDesktopNativeLocale(["nb-NO"])).toBe("no")
     expect(detectDesktopNativeLocale(["nn-NO"])).toBe("no")
   })
+
+  test.each(["pa-Arab-PK", "pa-Aran-PK"])("recognizes Punjabi in %s", (tag) => {
+    expect(detectDesktopNativeLocale([tag])).toBe("pa")
+  })
+
+  test("keeps Gurmukhi Punjabi distinct from the Shahmukhi bundle", () => {
+    expect(detectDesktopNativeLocale(["pa-Guru-IN", "fr"])).toBe("fr")
+  })
 })
 
 describe("desktop native ICU data", () => {
