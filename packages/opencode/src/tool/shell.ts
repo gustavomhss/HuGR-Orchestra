@@ -539,9 +539,9 @@ export const ShellTool = Tool.define(
 
           const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(
-              Effect.flatMap((code) => Fiber.join(reader).pipe(Effect.as({ kind: "exit" as const, code }))),
+          const exit = yield* Effect.raceAllFirst([
+            Effect.all([handle.exitCode, Fiber.join(reader)], { concurrency: 2 }).pipe(
+              Effect.map(([code]) => ({ kind: "exit" as const, code })),
             ),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),

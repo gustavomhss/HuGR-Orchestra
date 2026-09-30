@@ -9,6 +9,8 @@ import { ACPProfile } from "@/acp/profile"
 export const AcpCommand = effectCmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",
+  // ACP loads each session's directory through its own services and HTTP requests.
+  instance: false,
   builder: (yargs) => {
     return withNetworkOptions(yargs).option("cwd", {
       describe: "working directory",
@@ -17,18 +19,8 @@ export const AcpCommand = effectCmd({
     })
   },
   handler: Effect.fn("Cli.acp")(function* (args) {
-    const { Server } = yield* Effect.promise(() => import("@/server/server"))
-    const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
     ACPProfile.mark("cli.acp.handler")
     process.env.OPENCODE_CLIENT = "acp"
-    const opts = yield* resolveNetworkOptions(args)
-    const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
-
-    const sdk = createOpencodeClient({
-      baseUrl: `http://${server.hostname}:${server.port}`,
-      headers: ServerAuth.headers(),
-    })
-
     const input = new WritableStream<Uint8Array>({
       write(chunk) {
         return new Promise<void>((resolve, reject) => {
@@ -54,6 +46,7 @@ export const AcpCommand = effectCmd({
           controller.enqueue(new Uint8Array(chunk))
         })
         process.stdin.on("end", () => {
+          ACPProfile.mark("cli.acp.stdin.end")
           controller.close()
           Deferred.doneUnsafe(ended, Effect.void)
         })
@@ -64,17 +57,32 @@ export const AcpCommand = effectCmd({
       },
     })
 
-    const stream = ndJsonStream(input, output)
-    const agent = ACP.init({ sdk })
-
-    new AgentSideConnection((conn) => {
-      ACPProfile.mark("cli.acp.connection.create")
-      return agent.create(conn)
-    }, stream)
-
-    yield* Effect.logInfo("setup connection")
     process.stdin.resume()
-    // EOF can arrive as soon as the stream starts, before this await is reached.
-    yield* Deferred.await(ended)
+    // EOF must also stop startup before heavy imports and server setup complete.
+    yield* Effect.raceFirst(
+      Effect.gen(function* () {
+        const { Server } = yield* Effect.promise(() => import("@/server/server"))
+        const { ACP } = yield* Effect.promise(() => import("@/acp/agent"))
+        const opts = yield* resolveNetworkOptions(args)
+        const server = yield* Effect.promise(() =>
+          ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)),
+        )
+        const sdk = createOpencodeClient({
+          baseUrl: `http://${server.hostname}:${server.port}`,
+          headers: ServerAuth.headers(),
+        })
+        const agent = ACP.init({ sdk })
+        new AgentSideConnection(
+          (conn) => {
+            ACPProfile.mark("cli.acp.connection.create")
+            return agent.create(conn)
+          },
+          ndJsonStream(input, output),
+        )
+        yield* Effect.logInfo("setup connection")
+        yield* Deferred.await(ended)
+      }),
+      Deferred.await(ended),
+    )
   }),
 })

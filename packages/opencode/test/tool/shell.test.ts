@@ -1,7 +1,8 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import type * as Scope from "effect/Scope"
 import os from "os"
 import path from "path"
@@ -1009,6 +1010,68 @@ describe("tool.shell permissions", () => {
 describe("tool.shell abort", () => {
   const unix = process.platform === "win32" ? it.live.skip : it.live
 
+  it.live("preserves collector failure before the command exits", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const error = new Error("metadata collector failed")
+        const tool = yield* initShell()
+        const exit = yield* tool
+          .execute(
+            { command: "echo collected && sleep 60" },
+            {
+              ...ctx,
+              metadata: (input) =>
+                (input.metadata as { output?: string }).output?.includes("collected") ? Effect.die(error) : Effect.void,
+            },
+          )
+          .pipe(Effect.timeout("2 seconds"), Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(error)
+      }),
+    ),
+  )
+
+  it.live(
+    "aborts while a completed command's output collector is still running",
+    () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const controller = new AbortController()
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+          const spawned = yield* Deferred.make<ChildProcessSpawner.ChildProcessHandle>()
+          const seen = yield* Deferred.make<void>()
+          const work = yield* run(
+            { command: "echo collected" },
+            {
+              ...ctx,
+              abort: controller.signal,
+              metadata: (input) =>
+                (input.metadata as { output?: string }).output?.includes("collected")
+                  ? Deferred.succeed(seen, undefined).pipe(Effect.andThen(Effect.never))
+                  : Effect.void,
+            },
+          ).pipe(
+            Effect.provideService(
+              ChildProcessSpawner.ChildProcessSpawner,
+              ChildProcessSpawner.make((command) =>
+                spawner.spawn(command).pipe(Effect.tap((handle) => Deferred.succeed(spawned, handle))),
+              ),
+            ),
+            Effect.forkChild,
+          )
+          yield* Deferred.await(seen)
+          const handle = yield* Deferred.await(spawned)
+          expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+          controller.abort()
+          const result = yield* Fiber.join(work)
+          expect(result.output).toContain("User aborted the command")
+        }),
+      ),
+    15_000,
+  )
+
   unix(
     "times out while a descendant holds output after the shell exits",
     () =>
@@ -1023,43 +1086,57 @@ describe("tool.shell abort", () => {
     15_000,
   )
 
-  unix(
+  it.live(
     "aborts after the shell exits and kills a descendant ignoring SIGTERM",
     () =>
       runIn(
         projectRoot,
         Effect.gen(function* () {
           const controller = new AbortController()
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+          const spawned = yield* Deferred.make<ChildProcessSpawner.ChildProcessHandle>()
+          const seen = yield* Deferred.make<void>()
           let descendant = 0
           yield* Effect.addFinalizer(() =>
             descendant
-              ? Effect.try({ try: () => process.kill(descendant, "SIGKILL"), catch: (cause) => cause }).pipe(Effect.ignore)
+              ? Effect.try({ try: () => process.kill(descendant, "SIGKILL"), catch: (cause) => cause }).pipe(
+                  Effect.ignore,
+                )
               : Effect.void,
           )
-          const result = yield* run(
+          const script = `const child=require("node:child_process").spawn(process.execPath,["-e",${JSON.stringify('process.on("SIGTERM",()=>{});console.log("descendant:"+process.pid);setInterval(()=>{},60000)')}],{stdio:"inherit"});child.unref()`
+          const command = `node -e ${evalarg(script)}`
+          const work = yield* run(
             {
-              command: `${bin} -e ${squote('process.on("SIGTERM",()=>{});console.log("descendant:"+process.pid);setInterval(()=>{},60000)')} & printf 'leader:%s\\n' "$$"`,
+              command: PS.has(sh()) ? `& ${command}` : command,
             },
             {
               ...ctx,
               abort: controller.signal,
               metadata: (input) =>
                 Effect.gen(function* () {
-                  if (controller.signal.aborted) return
                   const output = (input.metadata as { output?: string }).output ?? ""
-                  const leader = output.match(/leader:(\d+)/)?.[1]
                   const child = output.match(/descendant:(\d+)/)?.[1]
-                  if (!leader || !child) return
+                  if (!child) return
                   descendant = Number(child)
                   expect(processState(descendant)).toMatch(/^[^Z]/)
-                  yield* pollWithTimeout(
-                    Effect.sync(() => (processState(Number(leader)) === "" ? true : undefined)),
-                    "shell leader did not exit",
-                  ).pipe(Effect.orDie)
-                  controller.abort()
+                  yield* Deferred.succeed(seen, undefined)
                 }),
             },
+          ).pipe(
+            Effect.provideService(
+              ChildProcessSpawner.ChildProcessSpawner,
+              ChildProcessSpawner.make((command) =>
+                spawner.spawn(command).pipe(Effect.tap((handle) => Deferred.succeed(spawned, handle))),
+              ),
+            ),
+            Effect.forkChild,
           )
+          yield* Deferred.await(seen)
+          const handle = yield* Deferred.await(spawned)
+          expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+          controller.abort()
+          const result = yield* Fiber.join(work)
           expect(result.output).toContain("User aborted the command")
           expect(result.output).not.toContain("exceeding timeout")
           expect(descendant).toBeGreaterThan(0)
@@ -1175,31 +1252,51 @@ describe("tool.shell abort", () => {
       projectRoot,
       Effect.gen(function* () {
         const updates: string[] = []
+        const tmp = yield* tmpdirScoped()
+        const fs = yield* FSUtil.Service
+        const ack = path.join(tmp, "ack")
+        const script = `const fs=require("node:fs");const watcher=fs.watch(${JSON.stringify(tmp)},()=>{if(fs.existsSync(${JSON.stringify(ack)})){watcher.close();console.log("second")}});console.log("first")`
+        const command = `${bin} -e ${evalarg(script)}`
         const result = yield* run(
           {
-            command: `echo first && sleep 0.1 && echo second`,
+            command: PS.has(sh()) ? `& ${command}` : command,
           },
           {
             ...ctx,
             metadata: (input) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
                 const output = (input.metadata as { output?: string })?.output
-                if (output) updates.push(output)
+                if (!output) return
+                updates.push(output)
+                if (output.includes("first") && !output.includes("second")) {
+                  yield* fs.writeWithDirs(ack, "").pipe(Effect.orDie)
+                }
               }),
           },
         )
         expect(result.output).toContain("first")
         expect(result.output).toContain("second")
         expect(updates.length).toBeGreaterThan(1)
+        expect(updates[0]).toContain("first")
+        expect(updates[0]).not.toContain("second")
       }),
     ),
   )
 })
 
 function processState(pid: number) {
-  const result = Bun.spawnSync(["ps", "-p", String(pid), "-o", "stat="])
+  const result = Bun.spawnSync(
+    process.platform === "win32"
+      ? ["tasklist", "/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]
+      : ["ps", "-p", String(pid), "-o", "stat="],
+  )
   expect([0, 1]).toContain(result.exitCode)
   expect(result.stderr.toString()).toBe("")
+  if (process.platform === "win32") {
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout.byteLength).toBeGreaterThan(0)
+    return result.stdout.toString().includes(`","${pid}",`) ? "running" : ""
+  }
   return result.stdout.toString().trim()
 }
 
