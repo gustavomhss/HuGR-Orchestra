@@ -459,6 +459,7 @@ export function withCliFixture<A, E>(
           Effect.promise(async () => {
             const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
             if (typeof ret !== "number") await ret
+            await proc.stdin.flush()
           }),
         receive: Queue.take(responses),
         // proc.stdin.end() is idempotent in Bun; no try/catch needed.
