@@ -87,11 +87,7 @@ async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
   await closed
 }
 
-// Waits here gate on a spawned worker process creating its ready file. Spawning
-// under host contention can exceed a few seconds without anything being wrong.
-const PROCESS_HANDSHAKE_TIMEOUT_MS = 15_000
-
-async function waitForFile(file: string, timeout = PROCESS_HANDSHAKE_TIMEOUT_MS) {
+async function waitForFile(file: string, timeout = 3_000) {
   const stop = Date.now() + timeout
   while (Date.now() < stop) {
     if (await exists(file)) return
@@ -372,7 +368,7 @@ describe("util.effect-flock", () => {
         const proc = spawnWorker({ key: "eflock:crash", dir, ready, holdMs: 120_000 })
 
         try {
-          await waitForFile(ready, PROCESS_HANDSHAKE_TIMEOUT_MS)
+          await waitForFile(ready, 5_000)
           await stopWorker(proc)
 
           // Backdate lock files so they're past STALE_MS (60s)

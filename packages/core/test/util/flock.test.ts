@@ -49,10 +49,7 @@ async function exists(file: string) {
     .catch(() => false)
 }
 
-// Waits here gate on a spawned worker process creating its ready file.
-const PROCESS_HANDSHAKE_TIMEOUT_MS = 15_000
-
-async function wait(file: string, timeout = PROCESS_HANDSHAKE_TIMEOUT_MS) {
+async function wait(file: string, timeout = 3_000) {
   const stop = Date.now() + timeout
   while (Date.now() < stop) {
     if (await exists(file)) return
@@ -164,7 +161,7 @@ describe("util.flock", () => {
     })
 
     try {
-      await wait(ready, PROCESS_HANDSHAKE_TIMEOUT_MS)
+      await wait(ready, 5_000)
       const seen: string[] = []
       const err = await Flock.withLock(key, async () => {}, {
         dir,
@@ -199,7 +196,7 @@ describe("util.flock", () => {
       timeoutMs: 30_000,
     })
 
-    await wait(ready, PROCESS_HANDSHAKE_TIMEOUT_MS)
+    await wait(ready, 5_000)
     await stopWorker(proc)
 
     let hit = false
