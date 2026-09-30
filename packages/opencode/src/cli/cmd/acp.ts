@@ -23,6 +23,7 @@ export const AcpCommand = cmd({
       Effect.gen(function* () {
         ACPProfile.mark("cli.acp.handler")
         process.env.OPENCODE_CLIENT = "acp"
+        const started = yield* Deferred.make<void>()
         const input = new WritableStream<Uint8Array>({
           write(chunk) {
             return new Promise<void>((resolve, reject) => {
@@ -60,7 +61,8 @@ export const AcpCommand = cmd({
         })
 
         const ready = yield* Deferred.make<Agent>()
-        const withAgent = <A>(fn: (agent: Agent) => Promise<A>) => Effect.runPromise(Deferred.await(ready)).then(fn)
+        const withAgent = <A>(fn: (agent: Agent) => Promise<A>) =>
+          Effect.runPromise(Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(ready)))).then(fn)
         const connection = new AgentSideConnection(
           () => ({
             initialize: async (params) => ACPInitialize.response(params),
@@ -83,6 +85,8 @@ export const AcpCommand = cmd({
         // EOF must also stop startup before heavy imports and server setup complete.
         yield* Effect.raceFirst(
           Effect.gen(function* () {
+            // Capabilities and EOF do not need a backend; load it only for agent work.
+            yield* Deferred.await(started)
             const modules = yield* Effect.all(
               {
                 server: Effect.promise(() =>
