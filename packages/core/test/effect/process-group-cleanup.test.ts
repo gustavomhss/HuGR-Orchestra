@@ -8,8 +8,10 @@ import { testEffect } from "../lib/effect"
 const it = testEffect(LayerNode.compile(CrossSpawnSpawner.node))
 
 describe.skipIf(process.platform === "win32")("POSIX process group ownership", () => {
-  for (const stubborn of [false, true]) {
-    it.live(`scope kills ${stubborn ? "stubborn" : "ordinary"} descendant after leader exit`, () =>
+  for (const input of (["scope", "SIGTERM", "SIGKILL", "SIGUSR1"] as const).flatMap((operation) =>
+    [false, true].map((stubborn) => ({ operation, stubborn })),
+  )) {
+    it.live(`${input.operation} kills ${input.stubborn ? "stubborn" : "ordinary"} descendant after leader exit`, () =>
       Effect.gen(function* () {
         const child = { pid: 0 }
         yield* Effect.addFinalizer(() =>
@@ -28,10 +30,11 @@ describe.skipIf(process.platform === "win32")("POSIX process group ownership", (
                   "-e",
                   `
 const child = require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(`
-${stubborn ? 'process.on("SIGTERM", () => {})' : ""}
+${input.stubborn ? 'process.on("SIGTERM", () => {})' : ""}
+process.on("SIGUSR1", () => process.exit(0))
 process.send(process.pid)
 setInterval(() => {}, 60000)
-`)}], { stdio: ["ignore", "inherit", "inherit", "ipc"] })
+`)}], { stdio: ["ignore", ${JSON.stringify(input.operation === "SIGKILL" ? "ignore" : "inherit")}, ${JSON.stringify(input.operation === "SIGKILL" ? "ignore" : "inherit")}, "ipc"] })
 child.once("message", (pid) => { console.log(pid); process.exit(0) })
 `,
                 ],
@@ -47,7 +50,10 @@ child.once("message", (pid) => { console.log(pid); process.exit(0) })
             child.pid = Number(lines[0])
             expect(child.pid).toBeGreaterThan(0)
             expect(state(child.pid)).toMatch(/^[^Z]/)
-            return yield* handle.exitCode
+            const code = yield* handle.exitCode
+            if (input.operation !== "scope")
+              yield* handle.kill({ killSignal: input.operation, forceKillAfter: "100 millis" })
+            return code
           }),
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
@@ -63,7 +69,7 @@ child.once("message", (pid) => { console.log(pid); process.exit(0) })
 function state(pid: number) {
   const result = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
   const output = result.stdout.toString().trim()
-  if (result.exitCode === 1 && !output && !result.stderr.length) return ""
+  if ((result.exitCode === 0 || result.exitCode === 1) && !output && !result.stderr.length) return ""
   if (result.exitCode !== 0 || !output) throw new Error(`ps failed: ${result.stderr.toString()}`)
   return output
 }

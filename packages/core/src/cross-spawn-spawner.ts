@@ -35,6 +35,7 @@ const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
     case "ESRCH":
       return "NotFound"
     case "EACCES":
+    case "EPERM":
       return "PermissionDenied"
     case "EEXIST":
       return "AlreadyExists"
@@ -360,7 +361,8 @@ export const make = Effect.gen(function* () {
       if (!group || !opts?.forceKillAfter) return
       // Leader exit does not release ownership of its surviving process group.
       while (true) {
-        yield* killGroup(command, proc, 0)
+        if (process.platform === "darwin" && (yield* groupGone(command, proc))) return
+        if (process.platform !== "darwin") yield* killGroup(command, proc, 0)
         yield* Effect.sleep("20 millis")
       }
     }).pipe(
@@ -376,6 +378,31 @@ export const make = Effect.gen(function* () {
       orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
     })
   }
+
+  const groupGone = (command: ChildProcess.StandardCommand, proc: NodeChildProcess.ChildProcess) =>
+    Effect.callback<boolean, PlatformError.PlatformError>((resume) => {
+      // Darwin can return EPERM instead of ESRCH while an empty process group disappears.
+      const query = NodeChildProcess.execFile(
+        "/bin/ps",
+        ["-o", "stat=", "-g", String(proc.pid)],
+        (error, stdout, stderr) => {
+          if ((!error || error.code === 1) && !stdout.trim() && !stderr.trim()) return resume(Effect.succeed(true))
+          if (error) return resume(Effect.fail(toPlatformError("groupState", toError(error), command)))
+          if (stderr.trim()) return resume(Effect.fail(toPlatformError("groupState", new Error(stderr), command)))
+          resume(
+            Effect.succeed(
+              stdout
+                .trim()
+                .split("\n")
+                .every((state) => state.trim().startsWith("Z")),
+            ),
+          )
+        },
+      )
+      return Effect.sync(() => {
+        query.kill()
+      })
+    })
 
   const source = (handle: ChildProcessHandle, from: ChildProcess.PipeFromOption | undefined) => {
     const opt = from ?? "stdout"
