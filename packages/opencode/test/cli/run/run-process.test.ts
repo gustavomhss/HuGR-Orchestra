@@ -77,6 +77,8 @@ describe("opencode run (non-interactive subprocess)", () => {
         })
         expect(result.exitCode).not.toBe(0)
         expect(result.durationMs).toBeLessThan(15_000)
+        expect(result.stderr).toContain("UnknownError")
+        expect(result.stderr).toContain("Unexpected server error")
       }),
     30_000,
   )
