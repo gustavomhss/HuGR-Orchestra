@@ -1,4 +1,7 @@
 import { describe, expect } from "bun:test"
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { Effect, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -13,7 +16,14 @@ describe.skipIf(process.platform === "win32")("POSIX process group ownership", (
   )) {
     it.live(`${input.operation} kills ${input.stubborn ? "stubborn" : "ordinary"} descendant after leader exit`, () =>
       Effect.gen(function* () {
+        const directory = yield* Effect.acquireRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "opencode-process-group-"))),
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        )
         const child = { pid: 0 }
+        const exited = Effect.gen(function* () {
+          while (!/^(Z|$)/.test(state(child.pid))) yield* Effect.sleep("20 millis")
+        }).pipe(Effect.timeout("2 seconds"))
         yield* Effect.addFinalizer(() =>
           child.pid
             ? Effect.try({ try: () => process.kill(child.pid, "SIGKILL"), catch: (error) => error }).pipe(Effect.ignore)
@@ -31,7 +41,10 @@ describe.skipIf(process.platform === "win32")("POSIX process group ownership", (
                   `
 const child = require("node:child_process").spawn(process.execPath, ["-e", ${JSON.stringify(`
 ${input.stubborn ? 'process.on("SIGTERM", () => {})' : ""}
-process.on("SIGUSR1", () => process.exit(0))
+process.on("SIGUSR1", () => {
+  require("node:fs").writeFileSync(${JSON.stringify(path.join(directory, "signal"))}, "SIGUSR1")
+  process.exit(0)
+})
 process.send(process.pid)
 setInterval(() => {}, 60000)
 `)}], { stdio: ["ignore", ${JSON.stringify(input.operation === "SIGKILL" ? "ignore" : "inherit")}, ${JSON.stringify(input.operation === "SIGKILL" ? "ignore" : "inherit")}, "ipc"] })
@@ -50,16 +63,23 @@ child.once("message", (pid) => { console.log(pid); process.exit(0) })
             child.pid = Number(lines[0])
             expect(child.pid).toBeGreaterThan(0)
             expect(state(child.pid)).toMatch(/^[^Z]/)
+            const group = Bun.spawnSync(["ps", "-o", "pgid=", "-p", String(child.pid)])
+            expect(group.exitCode).toBe(0)
+            expect(Number(group.stdout.toString())).toBe(Number(handle.pid))
             const code = yield* handle.exitCode
-            if (input.operation !== "scope")
+            if (input.operation !== "scope") {
               yield* handle.kill({ killSignal: input.operation, forceKillAfter: "100 millis" })
+              // Observe public kill before scope cleanup can repair a missing implementation.
+              yield* exited
+              expect(state(child.pid)).toMatch(/^(Z|$)/)
+              if (input.operation === "SIGUSR1")
+                expect(yield* Effect.promise(() => Bun.file(path.join(directory, "signal")).text())).toBe("SIGUSR1")
+            }
             return code
           }),
         )
         expect(code).toBe(ChildProcessSpawner.ExitCode(0))
-        yield* Effect.gen(function* () {
-          while (!/^(Z|$)/.test(state(child.pid))) yield* Effect.sleep("20 millis")
-        }).pipe(Effect.timeout("2 seconds"))
+        yield* exited
         expect(state(child.pid)).toMatch(/^(Z|$)/)
       }),
     )

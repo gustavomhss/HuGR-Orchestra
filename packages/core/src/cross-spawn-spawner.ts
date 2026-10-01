@@ -367,7 +367,7 @@ export const make = Effect.gen(function* () {
       }
     }).pipe(
       Effect.catchIf(
-        (error) => error.reason._tag === "NotFound",
+        (error) => error.reason._tag === "NotFound" && error.reason.method === "kill",
         () => Effect.void,
       ),
     )
@@ -385,6 +385,7 @@ export const make = Effect.gen(function* () {
       const query = NodeChildProcess.execFile(
         "/bin/ps",
         ["-o", "stat=", "-g", String(proc.pid)],
+        { env: { ...process.env, COMMAND_MODE: "unix2003" } },
         (error, stdout, stderr) => {
           if ((!error || error.code === 1) && !stdout.trim() && !stderr.trim()) return resume(Effect.succeed(true))
           if (error) return resume(Effect.fail(toPlatformError("groupState", toError(error), command)))
