@@ -51,6 +51,27 @@ describe("opencode acp lifecycle subprocess", () => {
   )
 
   cliIt.live(
+    "source entry initializes and exits cleanly after stdin EOF",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const acp = yield* opencode.acp({ source: true })
+        yield* acp.send({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: 1, clientCapabilities: {} },
+        })
+        expect(yield* acp.receive.pipe(Effect.timeout(Duration.seconds(15)))).toMatchObject({
+          id: 1,
+          result: { protocolVersion: 1 },
+        })
+        acp.close()
+        expect(yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))).toBe(0)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
     "close capability and close request",
     ({ home, llm, opencode }) =>
       Effect.gen(function* () {

@@ -29,9 +29,7 @@ import path from "node:path"
 import { TestLLMServer } from "./llm-server"
 import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
-
-const opencodeRoot = path.resolve(import.meta.dir, "../../")
-const cliEntry = path.join(opencodeRoot, "src/index.ts")
+import { cliEntry, sourceEntry } from "./cli-entry"
 
 export const testModelID = "test/test-model"
 
@@ -140,6 +138,7 @@ export type ServeHandle = {
 export type AcpOpts = SpawnOpts & {
   readonly cwd?: string
   readonly extraArgs?: string[]
+  readonly source?: boolean
 }
 
 export type AcpHandle = {
@@ -399,7 +398,7 @@ export function withCliFixture<A, E>(
       // Either way we await proc.exited so the test scope doesn't leak.
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          Bun.spawn(["bun", "run", cliEntry, ...argv], {
+          Bun.spawn(["bun", "run", opts?.source ? sourceEntry : cliEntry, ...argv], {
             cwd: opts?.cwd ?? home,
             env: { ...process.env, ...env, ...opts?.env },
             stdin: "pipe",
