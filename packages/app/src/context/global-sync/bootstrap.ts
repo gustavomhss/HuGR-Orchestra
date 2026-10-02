@@ -550,5 +550,6 @@ export async function bootstrapDirectory(input: {
     }
 
     if (loading && slowErrs.length === 0) input.setStore("status", "complete")
+    input.setStore("bootstrapSettled", true)
   })()
 }

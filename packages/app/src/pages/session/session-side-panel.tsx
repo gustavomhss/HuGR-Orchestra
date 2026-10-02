@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { DragDropProvider as DndKitProvider, PointerSensor } from "@dnd-kit/solid"
@@ -42,6 +42,8 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
+import { useServerSync } from "@/context/server-sync"
 import { useSettings } from "@/context/settings"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -92,6 +94,8 @@ export function SessionSidePanel(props: {
   const command = useCommand()
   const dialog = useDialog()
   const sdk = useSDK()
+  const sync = useSync()
+  const serverSync = useServerSync()
   const { sessionKey, tabs, view, params } = useSessionLayout()
   const projectDirectory = createMemo(() => sdk().directory)
 
@@ -254,6 +258,12 @@ export function SessionSidePanel(props: {
     openReviewPanel()
     tabs().setActive(next)
   }
+  // Wait for bootstrap so Kobalte cannot replace the restored Review tab with Apps.
+  const PanelTabs = (input: ComponentProps<typeof Tabs>) => (
+    <Show when={layout.ready() && serverSync().ready && (props.canReview() || sync().data.bootstrapSettled)}>
+      <Tabs {...input} />
+    </Show>
+  )
   const browserTab = createMemo(() => {
     if (!props.fileBrowserState) return undefined
     const active = activeTab()
@@ -373,7 +383,7 @@ export function SessionSidePanel(props: {
                       >
                         <DragDropSensors />
                         <ConstrainDragYAxis />
-                        <Tabs value={activeTab()} onChange={activateTab}>
+                        <PanelTabs value={activeTab()} onChange={activateTab}>
                           <div class="sticky top-0 shrink-0 flex">
                             <Tabs.List
                               ref={(el: HTMLDivElement) => {
@@ -575,7 +585,7 @@ export function SessionSidePanel(props: {
                           <Show when={activeFileTab()} keyed>
                             {(tab) => <FileTabContent tab={tab} />}
                           </Show>
-                        </Tabs>
+                        </PanelTabs>
                         <DragOverlay>
                           <Show when={store.activeDraggable} keyed>
                             {(tab) => {
@@ -618,7 +628,7 @@ export function SessionSidePanel(props: {
                         tabs().move(source.id.toString(), source.index)
                       }}
                     >
-                      <Tabs value={activeTab()} onChange={activateTab}>
+                      <PanelTabs value={activeTab()} onChange={activateTab}>
                         <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
                           <Tabs.List
                             ref={(el: HTMLDivElement) => {
@@ -871,7 +881,7 @@ export function SessionSidePanel(props: {
                             />
                           </div>
                         </Show>
-                      </Tabs>
+                      </PanelTabs>
                     </DndKitProvider>
                   </Show>
                 </div>
