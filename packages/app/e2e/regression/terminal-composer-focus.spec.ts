@@ -77,6 +77,8 @@ test.beforeEach(async ({ page }) => {
 })
 
 test("routes typing to the composer unless the open terminal is focused", async ({ page }) => {
+  const connected = Promise.withResolvers<void>()
+  await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), () => connected.resolve())
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, "Terminal composer focus")
 
@@ -84,13 +86,16 @@ test("routes typing to the composer unless the open terminal is focused", async 
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal).toBeVisible()
-  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+  await connected.promise
+  const input = terminal.locator("textarea")
+  await terminal.locator("canvas").click()
+  await expect(input).toBeFocused()
 
   await page.keyboard.type("x")
   await expect(composer).toHaveText("")
 
-  await page.waitForTimeout(300)
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await input.blur()
+  await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(false)
   await page.keyboard.type("a")
 
   await expect(composer).toBeFocused()

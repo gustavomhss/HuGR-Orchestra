@@ -29,9 +29,7 @@ import path from "node:path"
 import { TestLLMServer } from "./llm-server"
 import { testProviderConfig } from "./test-provider"
 import { it } from "./effect"
-
-const opencodeRoot = path.resolve(import.meta.dir, "../../")
-const cliEntry = path.join(opencodeRoot, "src/index.ts")
+import { cliEntry, sourceEntry } from "./cli-entry"
 
 export const testModelID = "test/test-model"
 
@@ -63,6 +61,9 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
   return {
     OPENCODE_TEST_HOME: home,
     HOME: home,
+    // CLI directory resolution preserves the shell's logical PWD. A spawned
+    // child must not inherit the test runner's repository path after changing cwd.
+    PWD: home,
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_DATA_HOME: path.join(home, ".local/share"),
     XDG_STATE_HOME: path.join(home, ".local/state"),
@@ -137,6 +138,7 @@ export type ServeHandle = {
 export type AcpOpts = SpawnOpts & {
   readonly cwd?: string
   readonly extraArgs?: string[]
+  readonly source?: boolean
 }
 
 export type AcpHandle = {
@@ -150,6 +152,7 @@ export type AcpHandle = {
   // calls this, so tests only need it when asserting exit behavior.
   readonly close: () => void
   readonly exited: Promise<number>
+  readonly stderr: () => string
 }
 
 export type OpencodeCli = {
@@ -395,7 +398,7 @@ export function withCliFixture<A, E>(
       // Either way we await proc.exited so the test scope doesn't leak.
       const proc = yield* Effect.acquireRelease(
         Effect.sync(() =>
-          Bun.spawn(["bun", "run", cliEntry, ...argv], {
+          Bun.spawn(["bun", "run", opts?.source ? sourceEntry : cliEntry, ...argv], {
             cwd: opts?.cwd ?? home,
             env: { ...process.env, ...env, ...opts?.env },
             stdin: "pipe",
@@ -456,11 +459,13 @@ export function withCliFixture<A, E>(
           Effect.promise(async () => {
             const ret = proc.stdin.write(JSON.stringify(msg) + "\n")
             if (typeof ret !== "number") await ret
+            await proc.stdin.flush()
           }),
         receive: Queue.take(responses),
         // proc.stdin.end() is idempotent in Bun; no try/catch needed.
         close: () => proc.stdin.end(),
         exited: proc.exited as Promise<number>,
+        stderr: () => stderrChunks.join(""),
       } satisfies AcpHandle
     })
 

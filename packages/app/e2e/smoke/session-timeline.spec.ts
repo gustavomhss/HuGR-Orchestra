@@ -31,6 +31,7 @@ test.describe("smoke: session timeline", () => {
   test.setTimeout(240_000)
 
   test("keeps the visible message fixed while prepending history", async ({ page }) => {
+    const history = Promise.withResolvers<void>()
     const requests: { before?: string; phase: "start" | "end"; at: number }[] = []
     await mockOpenCodeServer(page, {
       sessions: fixture.sessions,
@@ -38,7 +39,9 @@ test.describe("smoke: session timeline", () => {
       directory: fixture.directory,
       project: fixture.project,
       pageMessages,
-      messageDelay: 3_000,
+      beforeMessagesResponse: async (input) => {
+        if (input.before) await history.promise
+      },
       onMessages: (input) => requests.push({ before: input.before, phase: input.phase, at: performance.now() }),
     })
     await configureSmokePage(page, fixture.directory)
@@ -46,17 +49,37 @@ test.describe("smoke: session timeline", () => {
     await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
     await waitForTimelineStable(page)
     const scroller = timelineScroller(page)
+    await expect(
+      scroller.locator(
+        `[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.targetMessageIDs.at(-1)}"]`,
+      ),
+    ).toBeVisible()
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeLessThanOrEqual(1)
     await pointAtTimeline(page)
     const deadline = Date.now() + 120_000
     while (!requests.some((request) => request.before && request.phase === "start")) {
       if (Date.now() >= deadline) throw new Error("Timed out scrolling to the history boundary")
+      const bottom = await scroller.evaluate(
+        (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+      )
       await page.mouse.wheel(0, -240)
-      await page.waitForTimeout(20)
+      await expect
+        .poll(
+          async () =>
+            requests.some((request) => request.before && request.phase === "start") ||
+            (await scroller.evaluate(
+              (element, bottom) => element.scrollHeight - element.clientHeight - element.scrollTop > bottom,
+              bottom,
+            )),
+        )
+        .toBe(true)
     }
     expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
     for (let index = 0; index < 12; index++) {
       await page.mouse.wheel(0, -120)
-      await page.waitForTimeout(20)
+      await waitForTimelineStable(page)
     }
     const keys = await scroller.evaluate((element) => {
       const view = element.getBoundingClientRect()
@@ -84,7 +107,17 @@ test.describe("smoke: session timeline", () => {
     const before = await positions()
     expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
 
+    const boundary = requests.find((request) => request.before && request.phase === "start")?.before
+    if (!boundary) throw new Error("History request has no fixture boundary")
+    const index = fixture.messages[fixture.targetID].findIndex((message) => message.info.id === boundary)
+    expect(index).toBeGreaterThan(0)
+    const older = fixture.messages[fixture.targetID].slice(0, index).findLast((message) => message.info.role === "user")
+    if (!older) throw new Error("Fixture has no user message preceding the requested history boundary")
+    history.resolve()
     await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+    await expect(
+      scroller.locator(`[data-timeline-row="UserMessage"][data-message-id="${older.info.id}"]`),
+    ).toBeAttached()
     await waitForTimelineStable(page)
     await expect.poll(positions).toEqual(before)
   })
@@ -125,20 +158,25 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ server, dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
-              server: "http://127.0.0.1:4096",
+              server,
               dirBase64,
               sessionId,
             })),
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      {
+        server: fixture.serverKey,
+        dirBase64: base64Encode(fixture.directory),
+        sourceID: fixture.sourceID,
+        targetID: fixture.targetID,
+      },
     )
 
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
@@ -251,20 +289,25 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ server, dirBase64, sourceID, targetID }) => {
         localStorage.setItem(
           "opencode.window.browser.dat:tabs",
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
-              server: "http://127.0.0.1:4096",
+              server,
               dirBase64,
               sessionId,
             })),
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      {
+        server: fixture.serverKey,
+        dirBase64: base64Encode(fixture.directory),
+        sourceID: fixture.sourceID,
+        targetID: fixture.targetID,
+      },
     )
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
     await expectSessionTitle(page, fixture.expected.sourceTitle)

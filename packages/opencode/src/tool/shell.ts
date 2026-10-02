@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Fiber, Option, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -483,7 +483,7 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
-          yield* Effect.forkScoped(
+          const reader = yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
               list.push({ text: chunk, size })
@@ -539,8 +539,10 @@ export const ShellTool = Tool.define(
 
           const timeout = Effect.sleep(`${input.timeout + 100} millis`)
 
-          const exit = yield* Effect.raceAll([
-            handle.exitCode.pipe(Effect.map((code) => ({ kind: "exit" as const, code }))),
+          const exit = yield* Effect.raceAllFirst([
+            Effect.all([handle.exitCode, Fiber.join(reader)], { concurrency: 2 }).pipe(
+              Effect.map(([code]) => ({ kind: "exit" as const, code })),
+            ),
             abort.pipe(Effect.map(() => ({ kind: "abort" as const, code: null }))),
             timeout.pipe(Effect.map(() => ({ kind: "timeout" as const, code: null }))),
           ])
@@ -552,6 +554,15 @@ export const ShellTool = Tool.define(
           if (exit.kind === "timeout") {
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+          }
+
+          if (exit.kind !== "exit") {
+            // The leader can exit while descendants still own its output pipes.
+            const drained = yield* Fiber.join(reader).pipe(Effect.timeoutOption("3 seconds"))
+            if (Option.isNone(drained)) {
+              yield* handle.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore)
+              yield* Fiber.interrupt(reader)
+            }
           }
 
           return exit.kind === "exit" ? exit.code : null

@@ -8,7 +8,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Tracer } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -1737,6 +1737,45 @@ unixNoLLMServer(
   30_000,
 )
 
+const observeRuns = Effect.gen(function* () {
+  const tracer = yield* Effect.tracer
+  const events: string[] = []
+  return {
+    events,
+    trace: Effect.withTracer(Tracer.make({
+      ...tracer,
+      span(options) {
+        if (options.name === "SessionPrompt.run") events.push("run")
+        return tracer.span(options)
+      },
+    })),
+  }
+})
+
+const heldShell = Effect.fn("test.heldShell")(function* (sessionID: SessionID) {
+  const test = yield* TestInstance
+  const fs = yield* FSUtil.Service
+  const prompt = yield* SessionPrompt.Service
+  const script = FSUtil.normalizePath(path.join(test.directory, "held-shell.cjs")).replaceAll("\\", "/")
+  const ready = path.join(test.directory, "shell-ready")
+  const release = path.join(test.directory, "shell-release")
+  yield* fs.writeWithDirs(
+    script,
+    `const fs = require("node:fs")
+const watcher = fs.watch(${JSON.stringify(test.directory)}, () => {
+  if (fs.existsSync(${JSON.stringify(release)})) watcher.close()
+})
+fs.writeFileSync(${JSON.stringify(ready)}, "")
+`,
+  )
+  const fiber = yield* prompt.shell({ sessionID, agent: "build", command: `node "${script}"` }).pipe(Effect.forkChild)
+  yield* pollWithTimeout(
+    fs.exists(ready).pipe(Effect.map((exists) => (exists ? true : undefined))),
+    "shell child never became ready",
+  )
+  return { fiber, release: fs.writeWithDirs(release, "") }
+})
+
 it.instance(
   "loop waits while shell runs and starts after shell exits",
   () =>
@@ -1750,17 +1789,20 @@ it.instance(
       })
       yield* llm.text("after-shell")
 
-      const sh = yield* prompt
-        .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
-        .pipe(Effect.forkChild)
-      yield* waitForBusy(chat.id)
+      const observed = yield* observeRuns
+      const sh = yield* heldShell(chat.id).pipe(observed.trace)
 
-      const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const loop = yield* prompt
+        .loop({ sessionID: chat.id })
+        .pipe(observed.trace, Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
 
+      expect(observed.events).toEqual([])
       expect(yield* llm.calls).toBe(0)
 
-      yield* Fiber.await(sh)
+      observed.events.push("release")
+      yield* sh.release
+      expect(Exit.isSuccess(yield* Fiber.await(sh.fiber))).toBe(true)
       const exit = yield* Fiber.await(loop)
 
       expect(Exit.isSuccess(exit)).toBe(true)
@@ -1769,6 +1811,7 @@ it.instance(
         expect(exit.value.parts.some((part) => part.type === "text" && part.text === "after-shell")).toBe(true)
       }
       expect(yield* llm.calls).toBe(1)
+      expect(observed.events).toEqual(["release", "run"])
     }),
   { git: true },
   10_000,
@@ -1787,18 +1830,23 @@ it.instance(
       })
       yield* llm.text("done")
 
-      const sh = yield* prompt
-        .shell({ sessionID: chat.id, agent: "build", command: "sleep 0.2" })
-        .pipe(Effect.forkChild)
-      yield* waitForBusy(chat.id)
+      const observed = yield* observeRuns
+      const sh = yield* heldShell(chat.id).pipe(observed.trace)
 
-      const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const a = yield* prompt
+        .loop({ sessionID: chat.id })
+        .pipe(observed.trace, Effect.forkChild({ startImmediately: true }))
+      const b = yield* prompt
+        .loop({ sessionID: chat.id })
+        .pipe(observed.trace, Effect.forkChild({ startImmediately: true }))
+      yield* Effect.yieldNow
 
+      expect(observed.events).toEqual([])
       expect(yield* llm.calls).toBe(0)
 
-      yield* Fiber.await(sh)
+      observed.events.push("release")
+      yield* sh.release
+      expect(Exit.isSuccess(yield* Fiber.await(sh.fiber))).toBe(true)
       const [ea, eb] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
 
       expect(Exit.isSuccess(ea)).toBe(true)
@@ -1806,8 +1854,10 @@ it.instance(
       if (Exit.isSuccess(ea) && Exit.isSuccess(eb)) {
         expect(ea.value.info.id).toBe(eb.value.info.id)
         expect(ea.value.info.role).toBe("assistant")
+        expect(ea.value.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
       }
       expect(yield* llm.calls).toBe(1)
+      expect(observed.events).toEqual(["release", "run"])
     }),
   { git: true },
   10_000,

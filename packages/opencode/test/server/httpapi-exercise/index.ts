@@ -676,12 +676,22 @@ const scenarios: Scenario[] = [
     .json(200, object),
   http.protected
     .post("/api/integration/{integrationID}/connect/key", "v2.integration.connect.key")
+    .mutating()
     .at((ctx) => ({
       path: route("/api/integration/{integrationID}/connect/key", { integrationID: "missing" }),
       headers: ctx.headers(),
       body: { key: "test" },
     }))
-    .status(500, undefined, "status"),
+    .status(204, () => Effect.gen(function* () {
+      const { Credential } = yield* Effect.promise(() => import("@opencode-ai/core/credential"))
+      const { AppNodeBuilder } = yield* Effect.promise(() => import("@opencode-ai/core/effect/app-node-builder"))
+      const stored = yield* Credential.Service.use((service) => service.all()).pipe(
+        Effect.provide(AppNodeBuilder.build(Credential.node)),
+      )
+      const matches = stored.filter((credential) => credential.integrationID === "missing")
+      check(matches.length === 1, "key connection should create exactly one stored credential")
+      check(matches[0]?.value.type === "key" && matches[0].value.key === "test", "key connection should persist its key")
+    }), "status"),
   http.protected
     .post("/api/integration/{integrationID}/connect/oauth", "v2.integration.connect.oauth")
     .at((ctx) => ({

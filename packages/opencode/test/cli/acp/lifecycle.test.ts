@@ -15,11 +15,58 @@ describe("opencode acp lifecycle subprocess", () => {
     "stdin EOF exits cleanly",
     ({ opencode }) =>
       Effect.gen(function* () {
-        const acp = yield* opencode.acp()
+        const acp = yield* opencode.acp({ env: { OPENCODE_ACP_PROFILE: "1" } })
         acp.close()
 
-        const code = yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))
+        const code = yield* Effect.promise(() => acp.exited).pipe(
+          Effect.timeoutOrElse({
+            duration: Duration.seconds(5),
+            orElse: () => Effect.fail(new Error(`ACP did not exit after stdin EOF\n${acp.stderr()}`)),
+          }),
+        )
         expect(code).toBe(0)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "stdin EOF exits cleanly after initialization",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const acp = yield* opencode.acp()
+        yield* acp.send({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: 1, clientCapabilities: {} },
+        })
+        expect(yield* acp.receive.pipe(Effect.timeout(Duration.seconds(15)))).toMatchObject({
+          id: 1,
+          result: { protocolVersion: 1 },
+        })
+        acp.close()
+        expect(yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))).toBe(0)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "source entry initializes and exits cleanly after stdin EOF",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const acp = yield* opencode.acp({ source: true })
+        yield* acp.send({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: { protocolVersion: 1, clientCapabilities: {} },
+        })
+        expect(yield* acp.receive.pipe(Effect.timeout(Duration.seconds(15)))).toMatchObject({
+          id: 1,
+          result: { protocolVersion: 1 },
+        })
+        acp.close()
+        expect(yield* Effect.promise(() => acp.exited).pipe(Effect.timeout(Duration.seconds(5)))).toBe(0)
       }),
     60_000,
   )

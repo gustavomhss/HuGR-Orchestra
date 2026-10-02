@@ -189,6 +189,8 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       return note.selected()
     },
     onOpenDraft: note.openDraft,
+    onFocus: note.select,
+    getFocusSelectedRange: note.selected,
   })
 
   const onLineSelected = (range: SelectedLineRange | null) => {

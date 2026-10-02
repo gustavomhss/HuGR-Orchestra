@@ -1,3 +1,5 @@
+import { mockServerUrl } from "../utils/mock-server"
+
 const words = [
   "alpha",
   "bravo",
@@ -21,7 +23,7 @@ const words = [
   "vector",
 ]
 
-const serverKey = "http://127.0.0.1:4096"
+const serverKey = mockServerUrl()
 const sourceID = "ses_smoke_source"
 const targetID = "ses_smoke_target"
 const directory = "C:/OpenCode/SmokeProject"

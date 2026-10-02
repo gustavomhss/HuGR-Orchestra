@@ -6,7 +6,7 @@ const draftID = "draft_legacy_new_session"
 const directory = "C:/OpenCode/LegacyNewSession"
 const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
-test("redirects a draft to the legacy new-session route", async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -32,10 +32,21 @@ test("redirects a draft to the legacy new-session route", async ({ page }) => {
     },
     { directory, draftID, server },
   )
+})
 
+test("redirects a draft to the legacy new-session route before layout retirement", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-09-01T12:00:00Z"))
   await page.goto(`/new-session?draftId=${draftID}`)
 
   await expect(page).toHaveURL(`/${base64Encode(directory)}/session`)
   await expect(page.locator("header[data-tauri-drag-region]")).toBeVisible()
   await expect(page.locator('[data-component="prompt-input"]')).toBeVisible()
+})
+
+test("keeps a draft in the new layout after retirement despite a legacy preference", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-09-15T12:00:00Z"))
+  await page.goto(`/new-session?draftId=${draftID}`)
+
+  await expect(page.locator('[data-component="prompt-input-v2"]')).toBeVisible()
+  await expect(page).toHaveURL(`/new-session?draftId=${draftID}`)
 })

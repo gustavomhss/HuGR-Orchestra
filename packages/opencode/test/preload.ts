@@ -90,3 +90,9 @@ process.env["OPENCODE_DB"] = ":memory:"
 const { initProjectors } = await import("../src/server/projectors")
 
 initProjectors()
+
+if (process.platform === "win32" || process.env.OPENCODE_TEST_CLI_BUNDLE === "1") {
+  const { disposeCliEntry } = await import("./lib/cli-entry")
+  // Preload hooks are process-wide; a test-file hook would delete the shared entry too early.
+  afterAll(disposeCliEntry)
+}

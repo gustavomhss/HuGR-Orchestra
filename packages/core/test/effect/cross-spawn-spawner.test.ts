@@ -97,6 +97,17 @@ describe("cross-spawn spawner", () => {
         expect(code).toBe(ChildProcessSpawner.ExitCode(42))
       }),
     )
+
+    fx.live(
+      "retains pipe output when collected after process exit",
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        const handle = yield* spawner.spawn(js('process.stdout.write("out"); process.stderr.write("err")'))
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(yield* decodeByteStream(handle.stdout)).toBe("out")
+        expect(yield* decodeByteStream(handle.stderr)).toBe("err")
+      }),
+    )
   })
 
   describe("cwd option", () => {
@@ -229,6 +240,21 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("process control", () => {
+    fx.live(
+      "killing an exited child is harmless",
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+        const handle = yield* spawner.spawn(js("process.exit(0)"))
+        expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
+        yield* handle.kill({ forceKillAfter: "3 seconds" })
+      }),
+    )
+
+    fx.live("observes exit and releases buffered unread output", Effect.gen(function* () {
+      const handle = yield* js('process.stdout.write("x".repeat(64 * 1024)); process.exit(0)')
+      expect(yield* handle.exitCode.pipe(Effect.timeout("5 seconds"))).toBe(ChildProcessSpawner.ExitCode(0))
+    }))
+
     fx.effect(
       "kills a running process",
       Effect.gen(function* () {

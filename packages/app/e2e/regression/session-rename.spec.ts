@@ -102,7 +102,7 @@ test("renames and closes the session tab from its context menu", async ({ page }
   await page.keyboard.press("Escape")
   await expect(page.getByRole("menuitem", { name: "Rename", exact: true })).toBeHidden()
   await expect(tab).toBeFocused()
-  await tab.press("Shift+F10")
+  await tab.press("ContextMenu")
   await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
   const input = page.locator('[data-slot="tab-title"][contenteditable="true"]')
   await expect(input).toBeFocused()

@@ -1,8 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { currentSession } from "../utils/mock-server"
+import { currentSession, isMockApiRequest, mockServerUrl } from "../utils/mock-server"
 
-const serverA = "http://127.0.0.1:4096"
+const serverA = mockServerUrl()
 const serverB = "http://127.0.0.1:4097"
 const sessionA = session("ses_server_a", "C:/server-a", "Server A session")
 const sessionB = session("ses_server_b", "/home/server-b", "Server B session")
@@ -54,7 +54,7 @@ function session(id: string, directory: string, title: string) {
 async function mockServers(page: Page) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
-    if (url.origin !== serverA && url.origin !== serverB) return route.fallback()
+    if (!isMockApiRequest(route) || (url.origin !== serverA && url.origin !== serverB)) return route.fallback()
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)

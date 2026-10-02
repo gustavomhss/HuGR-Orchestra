@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { installSseTransport } from "../utils/sse-transport"
 import { expectAppVisible, expectSessionTitle } from "../utils/waits"
 
 const directory = "C:/OpenCode/ReviewLineCommentRegression"
@@ -50,14 +51,12 @@ test("shows a comment button when a line number is hovered", async ({ page }) =>
   await expectAppVisible(lineNumber)
 
   const comment = review.getByRole("button", { name: "Comment", exact: true })
-  await expect(async () => {
-    await lineNumber.hover()
-    await expect(lineNumber).toHaveAttribute("data-hovered", "")
-    await expect(comment).toHaveCount(1)
-    await expect(comment).toHaveCSS("pointer-events", "auto")
-    await comment.focus()
-    await expect(comment).toBeFocused()
-  }).toPass({ timeout: 10_000 })
+  await lineNumber.hover()
+  await expect(lineNumber).toHaveAttribute("data-hovered", "")
+  await expect(comment).toHaveCount(1)
+  await expect(comment).toHaveCSS("pointer-events", "auto")
+  await comment.focus()
+  await expect(comment).toBeFocused()
   await comment.press("Enter")
   await expect(review.getByRole("textbox")).toBeVisible()
   await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
@@ -85,7 +84,27 @@ test("stages a submitted line comment in the prompt context", async ({ page }) =
   await expect(context.locator("..")).toContainText("review.ts:2")
 })
 
+test("keeps a focused comment button usable when the pointer leaves", async ({ page }) => {
+  const review = page.locator('[data-component="session-review"]')
+  const comment = review.getByRole("button", { name: "Comment", exact: true })
+  const lineNumber = review.locator('[data-column-number="1"]').last()
+  await lineNumber.hover()
+  await expect(lineNumber).toHaveAttribute("data-hovered", "")
+  await expect(comment).toHaveCount(1)
+  await expect(comment).toHaveCSS("pointer-events", "auto")
+  await comment.focus()
+  await expect(comment).toBeFocused()
+  await page.mouse.move(0, 0)
+  await expect(comment).toBeFocused()
+  await comment.press("Enter")
+  await expect(review.getByRole("textbox")).toBeVisible()
+  await expect(review.locator('[data-slot="line-comment-editor-label"]')).toHaveText("Commenting on line 1")
+})
+
 async function openReview(page: Page) {
+  const transport = await installSseTransport(page, {
+    server: `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`,
+  })
   await page.setViewportSize({ width: 700, height: 900 })
   await mockOpenCodeServer(page, {
     protocol: "v2",
@@ -146,13 +165,14 @@ async function openReview(page: Page) {
     }),
   })
 
-  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
-  await expectSessionTitle(page, title)
-  const changes = page.getByRole("tab", { name: "Changes" })
   const diffResponse = page.waitForResponse(
     (response) =>
       response.request().method() === "GET" && response.ok() && new URL(response.url()).pathname === "/api/vcs/diff",
   )
+  await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+  await transport.waitForConnection()
+  await expectSessionTitle(page, title)
+  const changes = page.getByRole("tab", { name: "Changes" })
   await changes.click()
   expect((await (await diffResponse).json()).data).toHaveLength(1)
   await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName(/Files Changed/)
