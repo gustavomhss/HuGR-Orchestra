@@ -149,7 +149,7 @@ describe("pty HttpApi bridge", () => {
 
     // Observe process exit through the running-only list before checking lookup.
     // A still-running process must not be mistaken for a broken legacy lookup filter.
-    const deadline = Date.now() + 15_000
+    const deadline = Date.now() + 5_000
     while (Date.now() < deadline) {
       const list = await app().request(PtyPaths.list, { headers })
       if ((await list.json()).length === 0) break
