@@ -1,8 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
-import { currentSession } from "../utils/mock-server"
+import { currentSession, isMockApiRequest, mockServerUrl } from "../utils/mock-server"
 
-const server = "http://127.0.0.1:4096"
+const server = mockServerUrl()
 const sessionA = session("ses_tab_a", "Tab A session")
 const sessionB = session("ses_tab_b", "Tab B session")
 const sessionC = session("ses_tab_c", "Tab C session")
@@ -86,7 +86,7 @@ async function mockServer(page: Page) {
   const sessions = [sessionA, sessionB, sessionC]
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url())
-    if (url.origin !== server) return route.fallback()
+    if (!isMockApiRequest(route) || url.origin !== server) return route.fallback()
     if ([`/api/session/${unresolvedSessionID}`, `/session/${unresolvedSessionID}`].includes(url.pathname))
       return new Promise(() => {})
     if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")

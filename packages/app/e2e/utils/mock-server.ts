@@ -1,5 +1,16 @@
 import type { Page, Route } from "@playwright/test"
 
+export function mockServerUrl() {
+  return `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+}
+
+export function isMockApiRequest(route: Route) {
+  return (
+    ["fetch", "xhr", "eventsource"].includes(route.request().resourceType()) &&
+    !new URL(route.request().url()).pathname.startsWith("/assets/")
+  )
+}
+
 const emptyList = new Set(["/skill", "/command", "/lsp", "/formatter", "/vcs/status", "/vcs/diff"])
 const emptyObject = new Set(["/global/config", "/config", "/provider/auth", "/mcp", "/experimental/resource"])
 

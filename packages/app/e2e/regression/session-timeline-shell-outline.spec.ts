@@ -89,6 +89,7 @@ test("keeps the patch card inside a fractionally short virtual row", async ({ pa
   const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
   const row = page.locator("[data-timeline-key]", { has: part })
   await expect(card).toBeVisible()
+  await expect(card).toContainText("const outline = true")
   await timeline.settle()
 
   const geometry = await row.evaluate((element) => {
