@@ -95,6 +95,7 @@ const toPlatformError = (
 }
 
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
+type ProcessOutput = Record<"stdout" | "stderr", PassThrough | null>
 
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
@@ -241,22 +242,20 @@ export const make = Effect.gen(function* () {
 
   const setupOutput = (
     command: ChildProcess.StandardCommand,
-    proc: NodeChildProcess.ChildProcess,
+    proc: ProcessOutput,
     out: ChildProcess.StdoutConfig,
     err: ChildProcess.StderrConfig,
   ) => {
-    let stdout = proc.stdout
-      ? NodeStream.fromReadable({
-          evaluate: () => proc.stdout!,
-          onError: (cause) => toPlatformError("fromReadable(stdout)", toError(cause), command),
-        })
-      : Stream.empty
-    let stderr = proc.stderr
-      ? NodeStream.fromReadable({
-          evaluate: () => proc.stderr!,
-          onError: (cause) => toPlatformError("fromReadable(stderr)", toError(cause), command),
-        })
-      : Stream.empty
+    const read = (key: "stdout" | "stderr") => Stream.unwrap(Effect.sync(() => {
+      const stream = proc[key]
+      if (stream?.errored) return Stream.fail(toPlatformError(`fromReadable(${key})`, stream.errored, command))
+      return stream ? NodeStream.fromReadable({
+        evaluate: () => stream,
+        onError: (cause) => toPlatformError(`fromReadable(${key})`, toError(cause), command),
+      }) : Stream.empty
+    }))
+    let stdout = read("stdout")
+    let stderr = read("stderr")
 
     if (Sink.isSink(out.stream)) stdout = Stream.transduce(stdout, out.stream)
     if (Sink.isSink(err.stream)) stderr = Stream.transduce(stderr, err.stream)
@@ -265,9 +264,24 @@ export const make = Effect.gen(function* () {
   }
 
   const spawn = (command: ChildProcess.StandardCommand, opts: NodeChildProcess.SpawnOptions) =>
-    Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
+    Effect.callback<
+      readonly [NodeChildProcess.ChildProcess, ExitSignal, ProcessOutput],
+      PlatformError.PlatformError
+    >((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
+      // Capture before the Effect scheduler resumes: Node drains unread child pipes at exit.
+      const output: ProcessOutput = {
+        stdout: proc.stdout ? new PassThrough() : null,
+        stderr: proc.stderr ? new PassThrough() : null,
+      }
+      // Observe errors immediately; Readable.errored preserves them for late readers.
+      output.stdout?.on("error", () => {})
+      output.stderr?.on("error", () => {})
+      proc.stdout?.on("error", (error) => output.stdout?.destroy(toError(error)))
+      proc.stderr?.on("error", (error) => output.stderr?.destroy(toError(error)))
+      if (proc.stdout && output.stdout) proc.stdout.pipe(output.stdout)
+      if (proc.stderr && output.stderr) proc.stderr.pipe(output.stderr)
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
@@ -275,6 +289,9 @@ export const make = Effect.gen(function* () {
       })
       proc.on("exit", (...args) => {
         exit = args
+        if (end) return
+        end = true
+        Deferred.doneUnsafe(signal, Exit.succeed(args))
       })
       proc.on("close", (...args) => {
         if (end) return
@@ -282,7 +299,7 @@ export const make = Effect.gen(function* () {
         Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
       })
       proc.on("spawn", () => {
-        resume(Effect.succeed([proc, signal]))
+        resume(Effect.succeed([proc, signal, output]))
       })
       return Effect.sync(() => {
         proc.kill("SIGTERM")
@@ -318,6 +335,7 @@ export const make = Effect.gen(function* () {
   ) =>
     Effect.suspend(() => {
       if (proc.kill(signal)) return Effect.void
+      if (proc.exitCode != null || proc.signalCode != null) return Effect.void
       return Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command))
     })
 
@@ -370,7 +388,7 @@ export const make = Effect.gen(function* () {
           const extra = fds(command.options)
           const dir = yield* cwd(command.options)
 
-          const [proc, signal] = yield* Effect.acquireRelease(
+          const [proc, signal, output] = yield* Effect.acquireRelease(
             spawn(command, {
               cwd: dir,
               env: env(command.options),
@@ -379,7 +397,14 @@ export const make = Effect.gen(function* () {
               shell: command.options.shell,
               windowsHide: process.platform === "win32",
             }),
-            Effect.fnUntraced(function* ([proc, signal]) {
+            Effect.fnUntraced(function* ([proc, signal, output]) {
+              // Closing an unread capture must not block child close or cancellation.
+              proc.stdout?.unpipe()
+              proc.stderr?.unpipe()
+              output.stdout?.destroy()
+              output.stderr?.destroy()
+              proc.stdout?.resume()
+              proc.stderr?.resume()
               const done = yield* Deferred.isDone(signal)
               const kill = timeout(proc, command, command.options)
               if (done) {
@@ -403,7 +428,7 @@ export const make = Effect.gen(function* () {
           )
 
           const fd = yield* setupFds(command, proc, extra)
-          const out = setupOutput(command, proc, sout, serr)
+          const out = setupOutput(command, output, sout, serr)
           let ref = true
           return makeHandle({
             pid: ProcessId(proc.pid!),
