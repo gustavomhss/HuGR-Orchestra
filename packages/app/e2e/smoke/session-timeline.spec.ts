@@ -61,13 +61,18 @@ test.describe("smoke: session timeline", () => {
     const deadline = Date.now() + 120_000
     while (!requests.some((request) => request.before && request.phase === "start")) {
       if (Date.now() >= deadline) throw new Error("Timed out scrolling to the history boundary")
-      const top = await scroller.evaluate((element) => element.scrollTop)
+      const bottom = await scroller.evaluate(
+        (element) => element.scrollHeight - element.clientHeight - element.scrollTop,
+      )
       await page.mouse.wheel(0, -240)
       await expect
         .poll(
           async () =>
             requests.some((request) => request.before && request.phase === "start") ||
-            (await scroller.evaluate((element, top) => element.scrollTop < top, top)),
+            (await scroller.evaluate(
+              (element, bottom) => element.scrollHeight - element.clientHeight - element.scrollTop > bottom,
+              bottom,
+            )),
         )
         .toBe(true)
     }
@@ -102,8 +107,17 @@ test.describe("smoke: session timeline", () => {
     const before = await positions()
     expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
 
+    const boundary = requests.find((request) => request.before && request.phase === "start")?.before
+    if (!boundary) throw new Error("History request has no fixture boundary")
+    const index = fixture.messages[fixture.targetID].findIndex((message) => message.info.id === boundary)
+    expect(index).toBeGreaterThan(0)
+    const older = fixture.messages[fixture.targetID].slice(0, index).findLast((message) => message.info.role === "user")
+    if (!older) throw new Error("Fixture has no user message preceding the requested history boundary")
     history.resolve()
     await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+    await expect(
+      scroller.locator(`[data-timeline-row="UserMessage"][data-message-id="${older.info.id}"]`),
+    ).toBeAttached()
     await waitForTimelineStable(page)
     await expect.poll(positions).toEqual(before)
   })
