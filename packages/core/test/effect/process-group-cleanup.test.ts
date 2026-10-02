@@ -68,7 +68,11 @@ child.once("message", (pid) => { console.log(pid); process.exit(0) })
             expect(Number(group.stdout.toString())).toBe(Number(handle.pid))
             const code = yield* handle.exitCode
             if (input.operation !== "scope") {
-              yield* handle.kill({ killSignal: input.operation, forceKillAfter: "100 millis" })
+              // Custom-signal acknowledgment is separate from the forced-escalation cases.
+              yield* handle.kill({
+                killSignal: input.operation,
+                ...(input.operation === "SIGUSR1" ? {} : { forceKillAfter: "100 millis" }),
+              })
               // Observe public kill before scope cleanup can repair a missing implementation.
               yield* exited
               expect(state(child.pid)).toMatch(/^(Z|$)/)
